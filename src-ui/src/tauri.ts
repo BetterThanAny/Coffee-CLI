@@ -205,6 +205,14 @@ export const commands = {
     invoke<HyperAgentStatus>('start_hyper_agent_server'),
   getHyperAgentEndpoint: () =>
     invoke<McpEndpoint | null>('get_hyper_agent_endpoint'),
+
+  // ─── Per-tool launch overrides (~/.coffee-cli/tools.json) ───────────
+  getToolConfig: (tool: string) =>
+    invoke<ToolConfigEntry>('get_tool_config', { tool }),
+  getAllToolConfigs: () =>
+    invoke<Record<string, ToolConfigEntry>>('get_all_tool_configs'),
+  setToolConfig: (tool: string, entry: ToolConfigEntry) =>
+    invoke<void>('set_tool_config', { tool, entry }),
 };
 
 export interface McpEndpoint {
@@ -216,4 +224,27 @@ export interface McpEndpoint {
 
 export interface HyperAgentStatus {
   endpoint: McpEndpoint;
+}
+
+/**
+ * One entry in `~/.coffee-cli/tools.json`. All fields are optional —
+ * empty strings / empty arrays fall through to Coffee CLI's built-in
+ * defaults for that tool. Lets users say things like "my hermes is at
+ * `wsl ~/.local/bin/hermes`" or "always launch claude with
+ * --dangerously-skip-permissions" without us having to auto-detect
+ * every conceivable install path.
+ */
+export interface ToolConfigEntry {
+  /** Full launch command. Whitespace-split — first token is the binary,
+   *  the rest are prepended to args. Empty falls through to default. */
+  command: string;
+  /** Args appended AFTER the built-in args (so tool-managed flags like
+   *  --mcp-config / --append-system-prompt still come first). */
+  extra_args: string[];
+  /** Pre-fills the cwd selector when starting a new tab. Empty falls
+   *  through to the launchpad's last-used cwd. */
+  default_cwd: string;
+  /** Custom directory to scan for this tool's session history files.
+   *  Empty falls through to the built-in scan path. */
+  history_path: string;
 }

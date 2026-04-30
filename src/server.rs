@@ -894,6 +894,55 @@ fn tier_terminal_start_blocking(
         }
     };
 
+    // ── User-configurable launch overrides ─────────────────────────────────
+    // ~/.coffee-cli/tools.json lets users say e.g. "my hermes is at
+    // `wsl ~/.local/bin/hermes`" or "always launch claude with
+    // --dangerously-skip-permissions". Empty fields fall through to the
+    // built-in defaults computed above. Skipped entirely for synthetic
+    // session ids that don't correspond to a user-facing tool key
+    // (vibeid uses the claude binary internally, etc — they have their
+    // own opinionated args we don't want overridden).
+    let (cmd, args) = match tool.as_deref() {
+        Some(name)
+            if matches!(
+                name,
+                "claude"
+                    | "qwen"
+                    | "hermes"
+                    | "opencode"
+                    | "openclaw"
+                    | "codex"
+                    | "gemini"
+                    | "terminal"
+            ) =>
+        {
+            let entry = crate::tool_config::get(name);
+            let (cmd, mut args) = (cmd, args);
+            let (cmd, args) = if let (Some(bin), prefix_args) =
+                crate::tool_config::parse_command(&entry.command)
+            {
+                // User overrode the binary. Prepend any prefix args
+                // (e.g. for `wsl claude`, prefix_args = ["claude"]) so
+                // the original built-in args (--mcp-config / --append-
+                // system-prompt / etc) follow them.
+                let mut new_args = prefix_args;
+                new_args.append(&mut args);
+                (bin, new_args)
+            } else {
+                (cmd, args)
+            };
+            // Append user's extra_args after the built-in flags so
+            // they take precedence (e.g. user can override --approval-
+            // mode by adding their own at the end).
+            let mut args = args;
+            args.extend(entry.extra_args.iter().cloned());
+            (cmd, args)
+        }
+        // Synthetic / pane-internal tools (vibeid / insights_prerun /
+        // remote / multi-agent) intentionally bypass user override.
+        _ => (cmd, args),
+    };
+
     // If a session with the same ID already exists (e.g. restart-in-place),
     // forcefully kill and remove it before spawning a fresh one.
     {
@@ -2194,6 +2243,32 @@ pub async fn get_hyper_agent_endpoint(
     Ok(state.hyper_agent_endpoint.lock().await.clone())
 }
 
+// ─── Per-tool launch overrides (~/.coffee-cli/tools.json) ────────────────
+//
+// Lets users tell Coffee CLI things like "my hermes is at `wsl
+// ~/.local/bin/hermes`, not on PATH" or "always launch claude with
+// --dangerously-skip-permissions". Replaces what the abandoned in-app
+// installer was supposed to handle by auto-detection — defer to the
+// user, who knows their machine better than we do.
+
+#[tauri::command]
+pub fn get_tool_config(tool: String) -> crate::tool_config::ToolConfigEntry {
+    crate::tool_config::get(&tool)
+}
+
+#[tauri::command]
+pub fn get_all_tool_configs() -> crate::tool_config::ToolConfig {
+    crate::tool_config::load()
+}
+
+#[tauri::command]
+pub fn set_tool_config(
+    tool: String,
+    entry: crate::tool_config::ToolConfigEntry,
+) -> Result<(), String> {
+    crate::tool_config::set(&tool, entry).map_err(|e| e.to_string())
+}
+
 #[derive(Serialize)]
 pub struct MultiAgentModeReport {
     pub ok: bool,
@@ -2385,6 +2460,9 @@ pub fn start_ui() -> anyhow::Result<()> {
             disable_multi_agent_mode,
             start_hyper_agent_server,
             get_hyper_agent_endpoint,
+            get_tool_config,
+            get_all_tool_configs,
+            set_tool_config,
         ])
         .setup(|app| {
             // Install Claude/Qwen hook scripts + settings patches.

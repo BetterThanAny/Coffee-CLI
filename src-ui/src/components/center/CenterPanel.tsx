@@ -6,6 +6,7 @@ import { ChatReader } from './ChatReader';
 import { MultiAgentGrid } from './MultiAgentGrid';
 import { FourSplitGrid } from './FourSplitGrid';
 import { HyperAgentPanel } from './HyperAgentPanel';
+import { ToolConfigModal } from './ToolConfigModal';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { useAppState, type ToolType } from '../../store/app-state';
 
@@ -371,6 +372,8 @@ export function CenterPanel() {
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [toolsInstalled, setToolsInstalled] = useState<Record<string, boolean>>({});
+  // Per-tool launch override modal (gear icon → opens settings for that tool).
+  const [configModalTool, setConfigModalTool] = useState<{ key: string; label: string } | null>(null);
   const [showArcadeGames, setShowArcadeGames] = useState(false);
   const [libraryTab, setLibraryTab] = useState<'agents' | 'games'>('agents');
   const [pinnedItems, setPinnedItems] = useState<string[]>(() => {
@@ -1302,6 +1305,26 @@ export function CenterPanel() {
                                       </svg>
                                     </div>
                                   )}
+                                  {/* Per-tool launch override gear. Hover-only.
+                                      Only shown for the 7 real CLI tools — meta-
+                                      tools (multi-agent / vibeid / installer /
+                                      hyper-agent) don't take a launch path. */}
+                                  {(['claude', 'codex', 'gemini', 'qwen', 'opencode', 'openclaw', 'hermes'] as const).includes(tool.key as any) && (
+                                    <div
+                                      className="launchpad-gear-btn"
+                                      title="Configure launch path / args"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (disabled) return;
+                                        setConfigModalTool({ key: tool.key as string, label: tool.label });
+                                      }}
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="3"/>
+                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                      </svg>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1655,6 +1678,17 @@ export function CenterPanel() {
           </div>
                 )}
       </div>
+
+      {/* Per-tool launch override modal. Mounted at root so its fixed-
+          position backdrop covers the whole window, not just the
+          launchpad area. */}
+      {configModalTool && (
+        <ToolConfigModal
+          toolKey={configModalTool.key}
+          toolLabel={configModalTool.label}
+          onClose={() => setConfigModalTool(null)}
+        />
+      )}
     </>
   );
 }
