@@ -45,6 +45,13 @@ export const ru = {
   'hyper_agent.ready': 'Hyper-Agent запущен: ваш локальный OpenClaw / Hermes Agent теперь имеет привилегии супер-админа для просмотра и управления каждым окном Coffee CLI. Общайтесь с OpenClaw / Hermes Agent через социальное приложение — они становятся вашим CEO, ведут команду агентов продолжать работать.',
   'hyper_agent.first_time_hint': 'Впервые здесь? Вставьте следующее правило в OpenClaw / Hermes Agent, чтобы они знали, как управлять всеми вашими запущенными Agent\'ами:',
   'hyper_agent.show_setup_again': 'Показать инструкцию снова',
+  'tool_config.command': 'Команда запуска',
+  'tool_config.extra_args': 'Доп. аргументы',
+  'tool_config.default_cwd': 'Каталог по умолчанию',
+  'tool_config.history_path': 'Путь истории',
+  'tool_config.reset': 'Сброс',
+  'tool_config.cancel': 'Отмена',
+  'tool_config.save': 'Сохранить',
   'vibeid.need_insights_confirm': 'Тест личности сначала требует ваш отчёт об использовании Claude Code.\n\n/insights будет запущен автоматически (около 1-2 минут), затем тест начнётся сам.\n\nПродолжить?',
   'vibeid.insights_timeout': 'Генерация отчёта заняла слишком много времени. Попробуйте позже или запустите /insights вручную во вкладке Claude Code.',
 

@@ -46,6 +46,13 @@ export const en = {
   'hyper_agent.ready': 'Hyper-Agent started: your local OpenClaw / Hermes Agent now have super-admin privilege to view and command every window in Coffee CLI. Talk to OpenClaw / Hermes Agent through your social app — they become your CEO, leading the agent team to keep working.',
   'hyper_agent.first_time_hint': 'First time? Paste the following rule into your OpenClaw / Hermes Agent so they know how to drive your running agents:',
   'hyper_agent.show_setup_again': 'Show setup instruction again',
+  'tool_config.command': 'Launch command',
+  'tool_config.extra_args': 'Extra arguments',
+  'tool_config.default_cwd': 'Default directory',
+  'tool_config.history_path': 'History path',
+  'tool_config.reset': 'Reset',
+  'tool_config.cancel': 'Cancel',
+  'tool_config.save': 'Save',
   'vibeid.need_insights_confirm': 'Personality Test needs your Claude Code usage report first.\n\nThe app will auto-run /insights now (takes about 1-2 minutes), then run the VibeID test automatically.\n\nContinue?',
   'vibeid.insights_timeout': 'Report generation took too long. Please try again, or run /insights manually in a Claude Code tab.',
 

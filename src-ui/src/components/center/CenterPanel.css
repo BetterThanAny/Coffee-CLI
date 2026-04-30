@@ -896,6 +896,133 @@
 /* (.library-skeleton-pin removed — skeleton no longer reserves a
    right-side slot now that pin checkmarks are gone.) */
 
+/* ─── Tool launch-override modal ─────────────────────────────────── */
+/* Theme-driven: reads --bg-panel / --text-1 / --accent / --border-*  */
+/* etc. so dawn (light) and dark themes both work without re-coloring */
+/* anything inline. No descriptive copy — only field labels.          */
+
+.tool-config-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.tool-config-modal {
+  width: min(480px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-md);
+  padding: 18px 22px 16px;
+  color: var(--text-1);
+  font-family: var(--font-primary);
+  font-size: 13px;
+  box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.5);
+}
+
+.tool-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.tool-config-close {
+  background: transparent;
+  border: 0;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+.tool-config-close:hover {
+  color: var(--text-1);
+}
+
+.tool-config-field {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.tool-config-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: 5px;
+}
+
+.tool-config-input {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  outline: none;
+  resize: vertical;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.tool-config-input:focus {
+  background: var(--bg-input-focus);
+  border-color: var(--border-focus);
+}
+
+.tool-config-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.tool-config-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--border-focus);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.tool-config-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tool-config-btn-subtle {
+  background: transparent;
+  color: var(--text-1);
+}
+.tool-config-btn-subtle:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.tool-config-btn-primary {
+  background: var(--accent);
+  color: var(--bg-app);
+  border-color: transparent;
+  font-weight: 600;
+}
+.tool-config-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
 /* ─── Tab Drag Ghost (drag-to-detach feedback) ─── */
 
 .tab-drag-ghost {
