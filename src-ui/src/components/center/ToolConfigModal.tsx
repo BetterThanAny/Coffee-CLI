@@ -46,6 +46,15 @@ const TOOL_DEFAULTS: Record<string, ToolConfigEntry> = {
   hermes:   { command: 'hermes',   extra_args: [], default_cwd: '', history_path: '~/.hermes/sessions' },
 };
 
+// Tools whose session history Coffee CLI's history scanner actually reads
+// (load_native_history_blocking in src/server.rs). For these we surface
+// the history_path field. For tools NOT in this set (openclaw / qwen),
+// the field is hidden — letting the user fill a path that nothing ever
+// scans would just be a footgun.
+const HISTORY_SCANNED_TOOLS = new Set([
+  'claude', 'codex', 'gemini', 'hermes', 'opencode',
+]);
+
 const defaultsFor = (key: string): ToolConfigEntry => TOOL_DEFAULTS[key] ?? EMPTY;
 
 function withFallback(user: ToolConfigEntry, def: ToolConfigEntry): ToolConfigEntry {
@@ -146,11 +155,13 @@ export function ToolConfigModal({ toolKey, toolLabel, onClose }: Props) {
               value={entry.default_cwd}
               onChange={v => setEntry({ ...entry, default_cwd: v })}
             />
-            <Field
-              label={t('tool_config.history_path' as any)}
-              value={entry.history_path}
-              onChange={v => setEntry({ ...entry, history_path: v })}
-            />
+            {HISTORY_SCANNED_TOOLS.has(toolKey) && (
+              <Field
+                label={t('tool_config.history_path' as any)}
+                value={entry.history_path}
+                onChange={v => setEntry({ ...entry, history_path: v })}
+              />
+            )}
           </>
         )}
 
