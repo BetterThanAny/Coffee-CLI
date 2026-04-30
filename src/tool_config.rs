@@ -129,6 +129,37 @@ pub fn parse_command(cmd: &str) -> (Option<String>, Vec<String>) {
     (Some(bin.to_string()), rest)
 }
 
+/// Expand a leading `~/` or bare `~` to the user's home directory.
+/// Used by both `default_cwd` and `history_path` overrides since users
+/// reasonably write `~/.hermes/sessions` and expect us to handle it.
+/// Windows paths (`\\wsl.localhost\...` / `C:\...`) and absolute Unix
+/// paths pass through unchanged.
+pub fn expand_path(input: &str) -> std::path::PathBuf {
+    if input == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return home;
+        }
+        return std::path::PathBuf::from("~");
+    }
+    if let Some(stripped) = input.strip_prefix("~/").or_else(|| input.strip_prefix("~\\")) {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(stripped);
+        }
+    }
+    std::path::PathBuf::from(input)
+}
+
+/// Resolve a tool's effective history-scan directory: user override
+/// (with ~ expansion) if set, else `default` (caller-supplied).
+pub fn history_path_for(tool: &str, default: std::path::PathBuf) -> std::path::PathBuf {
+    let cfg = get(tool).history_path;
+    if cfg.is_empty() {
+        default
+    } else {
+        expand_path(&cfg)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,6 +179,25 @@ mod tests {
                 vec!["exec".into(), "mybox".into(), "claude".into()]
             )
         );
+    }
+
+    #[test]
+    fn expand_path_handles_tilde_and_passthrough() {
+        let home = dirs::home_dir().expect("test needs a home dir");
+        // Tilde forms expand
+        assert_eq!(expand_path("~"), home);
+        assert_eq!(expand_path("~/.hermes/sessions"), home.join(".hermes").join("sessions"));
+        // Backslash form on Windows-style paths
+        assert_eq!(expand_path("~\\.hermes\\sessions"), home.join(".hermes\\sessions"));
+        // Non-tilde paths pass through verbatim — UNC, absolute Unix, drive letters
+        assert_eq!(
+            expand_path("\\\\wsl.localhost\\Ubuntu\\home\\user\\.hermes"),
+            std::path::PathBuf::from("\\\\wsl.localhost\\Ubuntu\\home\\user\\.hermes"),
+        );
+        assert_eq!(expand_path("/abs/unix/path"), std::path::PathBuf::from("/abs/unix/path"));
+        assert_eq!(expand_path("C:\\Users\\someone"), std::path::PathBuf::from("C:\\Users\\someone"));
+        // Tilde-in-middle does NOT expand (only leading)
+        assert_eq!(expand_path("/foo/~/bar"), std::path::PathBuf::from("/foo/~/bar"));
     }
 
     #[test]

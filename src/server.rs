@@ -1540,15 +1540,27 @@ fn read_native_session(file_path: String) -> Result<String, String> {
     #[cfg(not(windows))]
     let canonical = canonical_raw;
 
-    // Must reside under a known agent data directory
+    // Must reside under a known agent data directory.
+    //
+    // Built-in defaults cover the standard install locations; any
+    // additional paths the user configured via tool_config.history_path
+    // are also allowed (otherwise the WSL-redirected scanner would find
+    // sessions but reading them back would 403). Path canonicalization
+    // already resolved symlinks, so this is a pure prefix check.
     let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
-    let allowed: &[std::path::PathBuf] = &[
+    let mut allowed: Vec<std::path::PathBuf> = vec![
         home.join(".claude"),
         home.join(".hermes"),
         home.join(".codex").join("sessions"),
         home.join(".gemini").join("tmp"),
         home.join(".local").join("share").join("opencode"),
     ];
+    for tool in ["claude", "hermes", "codex", "gemini", "opencode"] {
+        let cfg = crate::tool_config::get(tool).history_path;
+        if !cfg.is_empty() {
+            allowed.push(crate::tool_config::expand_path(&cfg));
+        }
+    }
     if !allowed.iter().any(|prefix| canonical.starts_with(prefix)) {
         return Err("Access denied: path is outside allowed agent data directories".to_string());
     }
@@ -1815,21 +1827,44 @@ fn load_native_history_blocking() -> Result<Vec<SavedSession>, String> {
     let mut result: Vec<SavedSession> = Vec::new();
 
     if let Some(home) = dirs::home_dir() {
+        // Each scanner can be redirected at a custom directory via
+        // ~/.coffee-cli/tools.json (`tool_config.history_path`). Lets
+        // WSL users point Coffee CLI at their `\\wsl.localhost\<distro>
+        // \home\<user>\.<tool>\sessions\` paths, conda users point at
+        // their env-specific session dirs, etc. Falls back to the
+        // built-in default when no override is set.
+
         // 1. Claude Code (depth 2: projects/<hash>/<hash>.jsonl)
-        collect_jsonl_paths_with_mtime(home.join(".claude").join("projects"), 2, "claude", &mut file_candidates);
+        let claude_dir = crate::tool_config::history_path_for(
+            "claude",
+            home.join(".claude").join("projects"),
+        );
+        collect_jsonl_paths_with_mtime(claude_dir, 2, "claude", &mut file_candidates);
 
         // 2. Hermes (sessions/session_*.json — flat directory, JSON format)
-        collect_hermes_paths_with_mtime(home.join(".hermes").join("sessions"), &mut file_candidates);
+        let hermes_dir = crate::tool_config::history_path_for(
+            "hermes",
+            home.join(".hermes").join("sessions"),
+        );
+        collect_hermes_paths_with_mtime(hermes_dir, &mut file_candidates);
 
         // 3. Codex (depth 4: sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl)
-        collect_jsonl_paths_with_mtime(home.join(".codex").join("sessions"), 4, "codex", &mut file_candidates);
+        let codex_dir = crate::tool_config::history_path_for(
+            "codex",
+            home.join(".codex").join("sessions"),
+        );
+        collect_jsonl_paths_with_mtime(codex_dir, 4, "codex", &mut file_candidates);
 
         // 4. Gemini (depth 3: tmp/<project-folder>/chats/session-*.jsonl).
         // .json (legacy) files are skipped — collect_jsonl_paths_with_mtime
         // already filters to .jsonl, which matches the modern session
         // format. Old .json sessions don't have message rows in the
         // shape we expect, so dropping them avoids garbage entries.
-        collect_jsonl_paths_with_mtime(home.join(".gemini").join("tmp"), 3, "gemini", &mut file_candidates);
+        let gemini_dir = crate::tool_config::history_path_for(
+            "gemini",
+            home.join(".gemini").join("tmp"),
+        );
+        collect_jsonl_paths_with_mtime(gemini_dir, 3, "gemini", &mut file_candidates);
     }
 
     // Sort candidates by mtime desc and parse only the newest HISTORY_LIMIT.
@@ -1858,7 +1893,10 @@ fn load_native_history_blocking() -> Result<Vec<SavedSession>, String> {
 
     // 5. OpenCode (SQLite is cheap, query already caps rows)
     if let Some(home) = dirs::home_dir() {
-        let opencode_dir = home.join(".local").join("share").join("opencode");
+        let opencode_dir = crate::tool_config::history_path_for(
+            "opencode",
+            home.join(".local").join("share").join("opencode"),
+        );
         find_opencode_sessions(opencode_dir, &mut result);
     }
 
