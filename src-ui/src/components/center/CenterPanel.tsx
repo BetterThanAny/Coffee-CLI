@@ -607,18 +607,8 @@ export function CenterPanel() {
     });
   };
 
-  const renderPinIcon = (isPinned: boolean) => (
-    isPinned ? (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <circle cx="9" cy="9" r="8" fill="currentColor" />
-        <path d="M5.5 9.5L7.5 11.5L12.5 6.5" stroke="#1a1917" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ) : (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <circle cx="9" cy="9" r="8" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-    )
-  );
+  // (renderPinIcon removed — selection state is now indicated by the
+  // .library-item.is-pinned border + opacity, not a right-side icon.)
   const [arcadeGames, setArcadeGames] = useState<{name:string;path:string;size:number;icon?:string;title?:string}[]>([]);
   const [gameCatalog, setGameCatalog] = useState<RemoteGameEntry[]>([]);
   const [disableDrawer, setDisableDrawer] = useState(false);
@@ -1502,7 +1492,6 @@ export function CenterPanel() {
                           <div key={`skel-game-${i}`} className="library-item library-item-skeleton">
                             <div className="library-item-icon library-skeleton-block" />
                             <span className="library-skeleton-line" />
-                            <div className="library-pin-btn library-skeleton-pin" />
                           </div>
                         ))}
                       </div>
@@ -1576,7 +1565,7 @@ export function CenterPanel() {
                           return (
                             <div
                               key={game.name}
-                              className="library-item"
+                              className={`library-item ${isPinned ? 'is-pinned' : ''}`}
                               onClick={() => togglePin(pinId)}
                             >
                               <div className="library-item-icon">
@@ -1585,9 +1574,6 @@ export function CenterPanel() {
                                   : '🎮'}
                               </div>
                               <span className="library-item-name">{title}</span>
-                              <div className={`library-pin-btn ${isPinned ? 'pinned' : ''}`}>
-                                {renderPinIcon(isPinned)}
-                              </div>
                             </div>
                           );
                         })}

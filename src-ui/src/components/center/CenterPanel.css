@@ -716,23 +716,30 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
+  /* Unselected cards sit at reduced opacity so the SELECTED ones (full
+     opacity + accent border) visually pop forward. Inverse of the usual
+     "highlight selected" — we instead "fade unselected", which keeps the
+     selected look clean (no background tint, no shadow, just normal). */
+  opacity: 0.55;
+  transition: opacity 0.18s, border-color 0.18s;
 }
 
 .library-item:hover {
+  opacity: 0.85;
   border-color: var(--accent);
 }
 
 /* Selected state — pinned to launchpad. Same 1px border width as the
-   default state, only the COLOR changes, so toggling pinned never
-   shifts the card by even a pixel. (Avoids the "border becomes 2px on
-   active" trap which would re-flow the grid.) */
+   default (only the COLOR changes), so toggling pinned never shifts
+   the card by even a pixel. Combined with full opacity, the card
+   "comes into focus" while its peers stay muted. No background tint:
+   the contrast against still-faded neighbors is enough. */
 .library-item.is-pinned {
+  opacity: 1;
   border-color: var(--accent);
-  background: rgba(196, 149, 106, 0.05);
 }
-html[data-theme='light'] .library-item.is-pinned {
-  background: rgba(196, 149, 106, 0.08);
+.library-item.is-pinned:hover {
+  opacity: 1;
 }
 
 .library-item-icon {
@@ -773,26 +780,9 @@ html[data-theme='light'] .library-item.is-pinned {
   white-space: nowrap;
 }
 
-.library-pin-btn {
-  background: transparent;
-  border: none;
-  padding: 4px;
-  cursor: pointer;
-  color: var(--text-3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: color 0.2s;
-}
-
-.library-pin-btn:hover {
-  color: var(--text-1);
-}
-
-.library-pin-btn.pinned {
-  color: var(--accent);
-}
+/* (.library-pin-btn removed — pin state is now signaled by border +
+   opacity on .library-item.is-pinned, no right-side checkmark. The
+   right slot is reserved for the launch-settings gear on CLI tools.) */
 
 /* Per-tool launch settings gear, shown in the same right-edge slot
    formerly occupied by the pin checkmark. Only rendered for the 7 CLI
@@ -890,8 +880,7 @@ html[data-theme='light'] .library-item.is-pinned {
 }
 
 .library-skeleton-block,
-.library-skeleton-line,
-.library-skeleton-pin {
+.library-skeleton-line {
   background: var(--bg-hover);
   animation: library-skeleton-pulse 1.5s ease-in-out infinite;
   border-radius: var(--radius-sm);
@@ -904,12 +893,8 @@ html[data-theme='light'] .library-item.is-pinned {
   animation-delay: 0.15s;
 }
 
-.library-skeleton-pin {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  animation-delay: 0.3s;
-}
+/* (.library-skeleton-pin removed — skeleton no longer reserves a
+   right-side slot now that pin checkmarks are gone.) */
 
 /* ─── Tab Drag Ghost (drag-to-detach feedback) ─── */
 
