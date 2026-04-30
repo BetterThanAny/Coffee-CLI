@@ -412,9 +412,12 @@
   pointer-events: none;
 }
 
-/* Gear button — only visible on card hover. Sits next to the folder
-   button (or pinned right when no folder button is present). Lets users
-   open the per-tool launch override modal (path / args / cwd / history). */
+/* Gear button — sits inline next to the tool label, matching the
+   "small globe" hint on the Terminal card. Same subtle baseline opacity
+   (0.18) and hover boost (0.7) so the visual treatment is consistent.
+   Lets users open the per-tool launch override modal. Does NOT take
+   up space on the right side of the card, so the folder button position
+   stays exactly where it would be on a card without the gear. */
 .launchpad-gear-btn {
   flex-shrink: 0;
   display: flex;
@@ -425,16 +428,12 @@
   padding: 4px;
   cursor: pointer;
   color: var(--text-3);
-  opacity: 0;
+  opacity: 0.18;
   transition: opacity 0.15s;
 }
 
-.launchpad-card:hover .launchpad-gear-btn {
-  opacity: 0.35;
-}
-
 .launchpad-gear-btn:hover {
-  opacity: 0.85 !important;
+  opacity: 0.7;
 }
 
 .launchpad-gear-btn svg {

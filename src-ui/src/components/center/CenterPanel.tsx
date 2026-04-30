@@ -1277,7 +1277,11 @@ export function CenterPanel() {
                                 >
                                   <div className="launchpad-icon">{tool.icon}</div>
                                   <div className="launchpad-card-info">
-                                    <span style={isTerminal ? { display: 'inline-flex', alignItems: 'center', gap: '6px' } : undefined}>
+                                    {(() => {
+                                      const hasGear = (['claude', 'codex', 'gemini', 'qwen', 'opencode', 'openclaw', 'hermes'] as const).includes(tool.key as any);
+                                      const inlineLayout = isTerminal || hasGear;
+                                      return (
+                                    <span style={inlineLayout ? { display: 'inline-flex', alignItems: 'center', gap: '6px' } : undefined}>
                                       {tool.label}
                                       {isTerminal && (
                                         <span
@@ -1291,7 +1295,25 @@ export function CenterPanel() {
                                           </svg>
                                         </span>
                                       )}
+                                      {hasGear && (
+                                        <span
+                                          className="launchpad-gear-btn"
+                                          title="Configure launch path / args"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (disabled) return;
+                                            setConfigModalTool({ key: tool.key as string, label: tool.label });
+                                          }}
+                                        >
+                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <circle cx="12" cy="12" r="3"/>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                          </svg>
+                                        </span>
+                                      )}
                                     </span>
+                                      );
+                                    })()}
                                     {tool.requiresCwd && lastCwdByTool[tool.key!] && (
                                       <span className="launchpad-card-cwd">
                                         {formatCwd(lastCwdByTool[tool.key!])}
@@ -1302,26 +1324,6 @@ export function CenterPanel() {
                                     <div className="launchpad-folder-btn" onClick={(e) => { e.stopPropagation(); if (!disabled) handlePickFolder(tool.key!); }}>
                                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                                      </svg>
-                                    </div>
-                                  )}
-                                  {/* Per-tool launch override gear. Hover-only.
-                                      Only shown for the 7 real CLI tools — meta-
-                                      tools (multi-agent / vibeid / installer /
-                                      hyper-agent) don't take a launch path. */}
-                                  {(['claude', 'codex', 'gemini', 'qwen', 'opencode', 'openclaw', 'hermes'] as const).includes(tool.key as any) && (
-                                    <div
-                                      className="launchpad-gear-btn"
-                                      title="Configure launch path / args"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (disabled) return;
-                                        setConfigModalTool({ key: tool.key as string, label: tool.label });
-                                      }}
-                                    >
-                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <circle cx="12" cy="12" r="3"/>
-                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                                       </svg>
                                     </div>
                                   )}
