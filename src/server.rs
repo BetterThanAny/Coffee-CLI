@@ -681,9 +681,29 @@ fn tier_terminal_start_blocking(
     terminal_session: terminal::SharedSession,
     pane_paths: Option<crate::mcp_injector::PaneConfigPaths>,
 ) -> Result<(), String> {
-    // Use per-tab CWD from frontend, NOT the global project_dir.
-    // Each tab is independent: new tabs get home dir, existing tabs keep their own.
-    let dir = cwd.map(std::path::PathBuf::from).unwrap_or_default();
+    // CWD resolution order (first non-empty wins):
+    //   1. cwd passed from the frontend (launchpad's folder picker / per-tab cwd)
+    //   2. tool_config.default_cwd from ~/.coffee-cli/tools.json (WSL-type users
+    //      who want a fixed launch dir regardless of launchpad selection)
+    //   3. empty → spawn process inherits Coffee CLI's own cwd
+    //
+    // The launchpad picker dominates because it's the per-launch user choice;
+    // tool_config.default_cwd is the always-on fallback for users who don't
+    // want to pick each time (or whose launchpad-side path can't address the
+    // tool's actual workspace, e.g. WSL).
+    let frontend_cwd = cwd.unwrap_or_default();
+    let dir = if !frontend_cwd.is_empty() {
+        std::path::PathBuf::from(frontend_cwd)
+    } else if let Some(name) = tool.as_deref() {
+        let cfg_cwd = crate::tool_config::get(name).default_cwd;
+        if cfg_cwd.is_empty() {
+            std::path::PathBuf::default()
+        } else {
+            std::path::PathBuf::from(cfg_cwd)
+        }
+    } else {
+        std::path::PathBuf::default()
+    };
 
     // ── Multi-agent auto-approval ────────────────────────────────────────
     // Multi-agent pane session ids look like `${tabId}::pane-N`. When a
