@@ -346,8 +346,10 @@ function GambitImpl({
   }, [sendEmpty]);
 
   // ─── Context menu ─────────────────────────────────────────────
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
   const ctxMenuRef = useRef<HTMLDivElement | null>(null);
+  const isMac = navigator.platform.toUpperCase().includes('MAC');
+  const ctxMod = isMac ? '⌘' : 'Ctrl';
 
   // Windows-style dismiss: ANY interaction outside the menu closes it.
   //   - mousedown anywhere outside  → close (click inside runs the button's onClick)
@@ -386,7 +388,9 @@ function GambitImpl({
 
   const onContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
-    setCtxMenu({ x: e.clientX, y: e.clientY });
+    const ta = textareaRef.current;
+    const hasSelection = !!ta && (ta.selectionStart ?? 0) !== (ta.selectionEnd ?? 0);
+    setCtxMenu({ x: e.clientX, y: e.clientY, hasSelection });
   };
 
   const ctxCopy = () => {
@@ -751,14 +755,40 @@ function GambitImpl({
       {ctxMenu && createPortal(
         <div
           ref={ctxMenuRef}
-          className="gambit-ctx-menu"
-          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          className="term-ctx-menu"
+          style={{
+            // Clamp so the menu never overflows off-screen; flips upward when
+            // the trigger sits near the bottom edge (matches terminal & Explorer
+            // behavior). Width ~164, height ~152 (4 items + separator + padding).
+            left: Math.min(ctxMenu.x, window.innerWidth  - 168),
+            top:  Math.min(ctxMenu.y, window.innerHeight - 156),
+          }}
         >
-          <button className="gambit-ctx-item" onClick={ctxCut}>{t('gambit.ctx_cut')}</button>
-          <button className="gambit-ctx-item" onClick={ctxCopy}>{t('gambit.ctx_copy')}</button>
-          <button className="gambit-ctx-item" onClick={ctxPaste}>{t('gambit.ctx_paste')}</button>
-          <div className="gambit-ctx-divider" />
-          <button className="gambit-ctx-item" onClick={ctxSelectAll}>{t('gambit.ctx_select_all')}</button>
+          <button
+            className={`term-ctx-item${ctxMenu.hasSelection ? '' : ' disabled'}`}
+            onMouseDown={(e) => { e.preventDefault(); if (ctxMenu.hasSelection) ctxCut(); }}
+          >
+            <span>{t('menu.cut')}</span><kbd>{ctxMod}+X</kbd>
+          </button>
+          <button
+            className={`term-ctx-item${ctxMenu.hasSelection ? '' : ' disabled'}`}
+            onMouseDown={(e) => { e.preventDefault(); if (ctxMenu.hasSelection) ctxCopy(); }}
+          >
+            <span>{t('menu.copy')}</span><kbd>{ctxMod}+C</kbd>
+          </button>
+          <button
+            className="term-ctx-item"
+            onMouseDown={(e) => { e.preventDefault(); ctxPaste(); }}
+          >
+            <span>{t('menu.paste')}</span><kbd>{ctxMod}+V</kbd>
+          </button>
+          <div className="term-ctx-sep" />
+          <button
+            className="term-ctx-item"
+            onMouseDown={(e) => { e.preventDefault(); ctxSelectAll(); }}
+          >
+            <span>{t('menu.select_all')}</span><kbd>{ctxMod}+A</kbd>
+          </button>
         </div>,
         document.body,
       )}

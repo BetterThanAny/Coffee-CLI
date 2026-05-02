@@ -14,6 +14,24 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 
+// Warm document.fonts so Inter is fully decoded BEFORE any UI element first
+// needs glyphs that the body had not yet rendered. <link rel="preload"> in
+// index.html only guarantees the woff2 file is fetched — the browser still
+// defers font-face activation until a layout pass demands it. That deferred
+// activation is what caused the language-menu jitter: the menu was the first
+// place glyph badges (Я, Ñ, Vi, ề…) appeared, so opening it triggered
+// activation + font-display: swap, reflowing every row mid-frame.
+//
+// `document.fonts.load(spec)` runs the activation immediately. We don't await
+// — letting React mount in parallel is fine; the fonts will be ready well
+// before the user can click the language toggle.
+if (typeof document !== 'undefined' && document.fonts) {
+  document.fonts.load('400 14px Inter');
+  document.fonts.load('500 14px Inter');
+  document.fonts.load('600 14px Inter');
+  document.fonts.load('700 14px Inter');
+}
+
 // Window starts with `visible: false` (see tauri.conf.json) to hide the
 // Windows-default chrome flash. Reveal it only after the first paint so
 // the first frame the user sees is the final themed UI.
