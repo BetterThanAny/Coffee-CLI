@@ -3,15 +3,19 @@
 // At app launch, ensure:
 //   1. ~/.coffee-cli/hooks/coffee-cli-hook.py is up to date (written from
 //      the Python source embedded into the binary via include_str!).
-//   2. ~/.claude/settings.local.json registers our hook on the events we
-//      forward. Idempotent: stale entries from prior installs are stripped
-//      and replaced; existing user keys (permissions, env, …) are preserved.
+//   2. ~/.claude/settings.json registers our hook on the 5 events we forward.
+//      Idempotent: stale entries from prior installs are stripped and replaced;
+//      existing user keys (permissions, env, …) are preserved.
+//   3. Any historical Coffee CLI entries in settings.local.json are stripped
+//      so we don't double-fire (older Coffee CLI versions wrote there).
 //
-// We deliberately target settings.local.json rather than settings.json:
-// Claude Code's settings migration logic occasionally rewrites settings.json
-// and drops keys it doesn't own (the empirical bug that erased our hooks
-// silently between runs), but settings.local.json is documented as
-// per-machine user state and is never touched by Claude itself.
+// IMPORTANT — event list discipline:
+// Claude Code rejects the *entire* hooks block if it contains an unknown
+// event name (cf. vibe-notch source comment, anthropics/claude-code#6305).
+// The 5 events below are the proven-working set as of Claude Code v2.x.
+// Permission-prompt detection rides on `Notification` (subtype
+// `permission_prompt`), NOT a separate `PermissionRequest` event — that
+// name silently invalidated the whole config in Coffee CLI ≤ v1.8.5.
 //
 // Errors are logged, never fatal — a broken installer must not prevent
 // Coffee CLI from starting.
@@ -23,20 +27,19 @@ use std::path::{Path, PathBuf};
 const HOOK_SCRIPT: &str = include_str!("../scripts/coffee-cli-hook.py");
 const SCRIPT_FILENAME: &str = "coffee-cli-hook.py";
 
-/// Events Coffee CLI listens for. Matches the Python script's event map.
+/// Events Coffee CLI listens for. Mirrors vibe-notch (ClaudeIsland)'s
+/// proven-working set; do not add unknown event names — Claude Code drops
+/// the whole hooks block on first unrecognized key.
 const EVENTS: &[&str] = &[
     "UserPromptSubmit",
     "PreToolUse",
     "PostToolUse",
-    "PermissionRequest",
-    "Stop",
     "Notification",
-    "SessionStart",
-    "SessionEnd",
+    "Stop",
 ];
 
 /// Events where Claude expects a `matcher` regex (tool name filter).
-const EVENTS_WITH_MATCHER: &[&str] = &["PreToolUse", "PostToolUse", "PermissionRequest"];
+const EVENTS_WITH_MATCHER: &[&str] = &["PreToolUse", "PostToolUse"];
 
 pub fn install_all() {
     let home = match dirs::home_dir() {
@@ -55,14 +58,74 @@ pub fn install_all() {
         }
     };
 
-    let path = home.join(".claude").join("settings.local.json");
-    if let Err(e) = patch_settings(&path, &script_path) {
+    // Primary target: ~/.claude/settings.json. Local-settings.json was
+    // tried in v1.8.5 but hooks declared there fire unreliably under Claude
+    // Code v2.x (workspace-trust gate, cf. anthropics/claude-code#11519).
+    let primary = home.join(".claude").join("settings.json");
+    if let Err(e) = patch_settings(&primary, &script_path) {
         eprintln!(
             "[hook-installer] failed to patch {}: {}",
-            path.display(),
+            primary.display(),
             e
         );
     }
+
+    // Strip stale Coffee CLI entries from settings.local.json (v1.8.5 wrote
+    // there). Leaves user's other keys untouched. Without this cleanup the
+    // hook would fire twice per event on machines that ran v1.8.5.
+    let local = home.join(".claude").join("settings.local.json");
+    if local.exists() {
+        if let Err(e) = strip_coffee_hooks(&local) {
+            eprintln!(
+                "[hook-installer] failed to clean {}: {}",
+                local.display(),
+                e
+            );
+        }
+    }
+}
+
+/// Remove every Coffee CLI hook entry from `path` without touching any other
+/// user-owned key. Used to clean up after the v1.8.5 settings.local.json
+/// install location.
+fn strip_coffee_hooks(path: &Path) -> anyhow::Result<()> {
+    let text = fs::read_to_string(path)?;
+    let mut root: Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(_) => return Ok(()), // unparseable user file — leave it alone
+    };
+    let Some(hooks) = root.get_mut("hooks").and_then(|h| h.as_object_mut()) else {
+        return Ok(());
+    };
+
+    let mut empty_events = Vec::new();
+    for (event, slot) in hooks.iter_mut() {
+        if let Some(arr) = slot.as_array_mut() {
+            arr.retain(|e| !is_coffee_entry(e));
+            if arr.is_empty() {
+                empty_events.push(event.clone());
+            }
+        }
+    }
+    for k in empty_events {
+        hooks.remove(&k);
+    }
+
+    // If the hooks object is now fully empty, remove the key itself rather
+    // than leaving an empty `"hooks": {}` artifact.
+    let hooks_empty = root
+        .get("hooks")
+        .and_then(|h| h.as_object())
+        .map(|o| o.is_empty())
+        .unwrap_or(false);
+    if hooks_empty {
+        if let Some(obj) = root.as_object_mut() {
+            obj.remove("hooks");
+        }
+    }
+
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
 }
 
 fn write_script(home: &Path) -> anyhow::Result<PathBuf> {

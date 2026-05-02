@@ -34,10 +34,8 @@ def main() -> None:
     event = data.get("hook_event_name", "")
     status = None
 
-    if event in ("Stop", "StopFailure", "SessionEnd", "SessionStart"):
+    if event in ("Stop", "StopFailure"):
         status = "idle"
-    elif event == "PermissionRequest":
-        status = "wait_input"
     elif event == "Notification":
         # Claude Code may expose the notification subtype under different keys
         ntype = (
