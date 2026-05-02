@@ -159,10 +159,7 @@ fn patch_settings(path: &Path, script_path: &Path) -> anyhow::Result<()> {
     }
 
     // Ensure "hooks" is an object
-    let needs_reset = root
-        .get("hooks")
-        .map(|h| !h.is_object())
-        .unwrap_or(true);
+    let needs_reset = root.get("hooks").map(|h| !h.is_object()).unwrap_or(true);
     if needs_reset {
         root.as_object_mut()
             .unwrap()
@@ -185,9 +182,7 @@ fn patch_settings(path: &Path, script_path: &Path) -> anyhow::Result<()> {
             json!({ "hooks": [hook_cmd.clone()] })
         };
 
-        let slot = hooks
-            .entry(event.to_string())
-            .or_insert_with(|| json!([]));
+        let slot = hooks.entry(event.to_string()).or_insert_with(|| json!([]));
         if !slot.is_array() {
             *slot = json!([]);
         }

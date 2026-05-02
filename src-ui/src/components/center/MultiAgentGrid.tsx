@@ -41,24 +41,17 @@ interface Props {
   paneCount?: 2 | 3 | 4;
 }
 
-// v1.0 primary CLIs = Claude Code / Codex / Gemini only. OpenCode was
-// evaluated but dropped — its MCP config shape ('mcp' vs 'mcpServers')
-// and workspace-local `opencode.json` expectation diverge enough from
-// the other three that it deserves a v1.1 pass of its own rather than
-// a half-baked slot here. Users who want OpenCode in a quadrant can
-// still launch it manually via the single-terminal path and wire it
-// into the coffee-cli MCP endpoint by hand.
+// Local safe build: only Claude Code and Codex CLI are selectable agents.
 const PANE_CLI_OPTIONS: Array<{ value: ToolType; label: string }> = [
   { value: 'claude', label: 'Claude Code' },
   { value: 'codex', label: 'Codex' },
-  { value: 'gemini', label: 'Gemini' },
 ];
 
 export function MultiAgentGrid({ tab, hasBg, bgUrl, bgType, paneCount = 4 }: Props) {
   const { state, dispatch } = useAppState();
   const [focusedPaneIdx, setFocusedPaneIdx] = useState<number | null>(null);
 
-  // Detect which of the 3 coordination-eligible CLIs are actually installed
+  // Detect which of the coordination-eligible CLIs are actually installed
   // so the picker greys out the ones the user doesn't have (same visual
   // language as the Desktop launchpad — see .launchpad-card-disabled).
   // Runs once on mount; missing keys default to `true` so we don't flash
@@ -82,11 +75,10 @@ export function MultiAgentGrid({ tab, hasBg, bgUrl, bgType, paneCount = 4 }: Pro
   //
   // Post-v1.5 the backend wires each pane's MCP server and CLI
   // artifacts lazily inside `tier_terminal_start` (per-pane temp dir
-  // under `<temp>/coffee-cli/panes/`, plus a per-pane stub in
-  // `~/.gemini/extensions/` for the Gemini extension loader).
-  // Workspaces stay pristine — no CLAUDE.md / AGENTS.md / GEMINI.md /
-  // .multi-agent/ ever gets written, no global ~/.codex / ~/.gemini
-  // mcp_servers entries get touched.
+  // under `<temp>/coffee-cli/panes/`.
+  // Workspaces stay pristine — no CLAUDE.md / AGENTS.md /
+  // .multi-agent/ ever gets written, no global ~/.codex mcp_servers entries
+  // get touched.
   //
   // We still call enable/disable here so the backend has a structured
   // place to surface preflight warnings, and so future cross-cutting
@@ -290,10 +282,8 @@ interface EmptyPanePickerProps {
 
 // Per-CLI setup hints removed per user request: the paper-slice
 // aesthetic calls for a completely clean empty pane — just the three
-// CLI buttons, nothing else. Auth friction (Codex login, Gemini
-// /auth) surfaces naturally once the user clicks; no need to
-// pre-announce it. The skip-permissions auto-accept still lives in
-// server.rs for Claude, so users don't see a speed bump there.
+// CLI buttons, nothing else. Auth and permission prompts surface
+// naturally once the user clicks; no need to pre-announce them.
 function EmptyPanePicker({ paneIdx: _paneIdx, onSelect, sentinelEnabled, onToggleSentinel, toolsInstalled }: EmptyPanePickerProps) {
   const t = useT();
   return (

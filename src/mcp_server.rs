@@ -38,18 +38,14 @@ use std::{
 use crate::terminal::SharedSession;
 
 use rmcp::{
-    ErrorData as McpError, ServerHandler,
-    handler::server::{
-        router::tool::ToolRouter,
-        wrapper::Parameters,
-    },
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
     schemars::JsonSchema,
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
-        StreamableHttpServerConfig, StreamableHttpService,
-        session::local::LocalSessionManager,
+        session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
     },
+    ErrorData as McpError, ServerHandler,
 };
 use serde::{Deserialize, Serialize};
 
@@ -89,7 +85,7 @@ pub struct PaneInfo {
     /// was to keep long UUIDs out of the model's context).
     #[serde(skip, default)]
     pub full_id: String,
-    /// CLI running in this pane (claude / codex / gemini / opencode / shell / ...).
+    /// CLI running in this pane (claude / codex / shell / ...).
     pub cli: String,
     pub state: PaneState,
     /// Epoch seconds of last output from this pane.
@@ -121,19 +117,16 @@ impl PaneStore {
     pub fn new(session: SharedSession) -> Self {
         Self {
             session,
-            ansi_re: regex::Regex::new(
-                r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\].*?(?:\x07|\x1b\\)|\x1b.",
-            )
-            .expect("ANSI regex compiles"),
+            ansi_re: regex::Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\].*?(?:\x07|\x1b\\)|\x1b.")
+                .expect("ANSI regex compiles"),
         }
     }
 
     /// Snapshot every session in the shared map as a PaneInfo row.
     ///
-    /// v1.0 returns every session in the process; Tab-scoped filtering
+    /// v1.0 returns every session in the process; tab-scoped filtering
     /// (as defined in docs §5.7) is enforced by the UI pane selector and
-    /// by the primary CLI following CLAUDE.md / AGENTS.md / GEMINI.md
-    /// conventions. Day 5 UI work can add a `?tab=<id>` endpoint filter.
+    /// by the primary CLI following the injected per-pane protocol.
     async fn list(&self) -> Vec<PaneInfo> {
         // Extract everything we need under a brief lock, then drop it.
         let raw = tokio::task::spawn_blocking({
@@ -341,9 +334,15 @@ impl PaneStore {
                 let id_check = id.to_string();
                 let session_check = self.session.clone();
                 tokio::task::spawn_blocking(move || -> bool {
-                    let Ok(guard) = session_check.lock() else { return false; };
-                    let Some(sess) = guard.get(&id_check) else { return false; };
-                    let Ok(act) = sess.activity.lock() else { return false; };
+                    let Ok(guard) = session_check.lock() else {
+                        return false;
+                    };
+                    let Some(sess) = guard.get(&id_check) else {
+                        return false;
+                    };
+                    let Ok(act) = sess.activity.lock() else {
+                        return false;
+                    };
                     act.last_output_at < cr_send_time && act.last_status == "wait_input"
                 })
                 .await
@@ -638,7 +637,6 @@ pub struct ReadPaneArgs {
     pub last_n_lines: Option<usize>,
 }
 
-
 /// Extract the tab id portion of a pane id (`${tab_id}::pane-${idx}`).
 /// Used to scope `list_panes` and `send_to_pane` to the caller's own
 /// multi-agent Tab so simultaneous tabs don't see / dispatch to each
@@ -738,10 +736,9 @@ pub struct CoffeeMcp {
     /// The pane this MCP server instance is dedicated to — i.e. "the
     /// caller's identity, baked in at spawn time". Each multi-agent
     /// pane spawns its own MCP server bound to its own port, with
-    /// its own `self_pane_id` set. `None` means the server is
-    /// anonymous (legacy / non-multi-agent mode); in that case
-    /// `whoami` returns an error and `list_panes` doesn't mark
-    /// `is_self`.
+    /// its own `self_pane_id` set. `None` is unsupported in the local
+    /// safe build; tools return a failure payload instead of exposing
+    /// process-wide pane control.
     self_pane_id: Option<String>,
 }
 
@@ -756,13 +753,10 @@ impl CoffeeMcp {
     }
 
     #[tool(
-        description = "Return the caller's identity. Two modes: (1) when this \
-MCP server was spawned for a specific pane (intra-Coffee-CLI sentinel mode), \
+        description = "Return the caller's identity. When this MCP server was \
+spawned for a specific pane (intra-Coffee-CLI sentinel mode), \
 returns `{ pane_id: \"pane-N\" }` — that's the id you pass as `from` in \
-[COFFEE-DONE] markers. (2) when this MCP server is the global Hyper-Agent \
-admin endpoint (used by external orchestrators like OpenClaw / Hermes Agent), \
-returns `{ role: \"admin\", scope: \"all-panes\" }` — meaning you can see and \
-dispatch to every pane across every tab in this Coffee-CLI instance."
+[COFFEE-DONE] markers."
     )]
     async fn whoami(&self) -> Result<CallToolResult, McpError> {
         match &self.self_pane_id {
@@ -777,9 +771,8 @@ dispatch to every pane across every tab in this Coffee-CLI instance."
             }
             None => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::json!({
-                    "role": "admin",
-                    "scope": "all-panes",
-                    "note": "Hyper-Agent endpoint — list_panes returns every pane across every tab; send_to_pane accepts any pane id. From the target pane's POV, your input arrives as plain stdin, indistinguishable from human typing.",
+                    "status": "failed",
+                    "error": "anonymous MCP control is disabled in this local safe build",
                 })
                 .to_string(),
             )])),
@@ -788,85 +781,94 @@ dispatch to every pane across every tab in this Coffee-CLI instance."
 
     #[tool(
         description = "List panes. Default scope is the caller's own multi-agent \
-Tab — cross-Tab panes are filtered out. EXCEPTION: when called via the global \
-Hyper-Agent admin endpoint (whoami → role=admin), this returns ALL panes across \
-ALL tabs in the Coffee-CLI instance — that's the 'super admin' scope used by \
-OpenClaw / Hermes Agent. Each row has id, title, cli, state (empty/idle/busy/\
-terminated). Use this to discover what peers exist before calling send_to_pane."
+Tab — cross-Tab panes are filtered out. Each row has id, title, cli, state \
+(empty/idle/busy/terminated). Use this to discover what peers exist before \
+calling send_to_pane."
     )]
     async fn list_panes(&self) -> Result<CallToolResult, McpError> {
+        let Some(self_id) = &self.self_pane_id else {
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::json!({
+                    "status": "failed",
+                    "error": "anonymous MCP control is disabled in this local safe build",
+                })
+                .to_string(),
+            )]));
+        };
         let mut panes = self.panes.list().await;
-        if let Some(self_id) = &self.self_pane_id {
-            // Tab-scope filter: only show panes whose tab matches the
-            // caller's. This is what makes simultaneous multi-agent
-            // tabs safe — a pane in Tab A can't accidentally dispatch
-            // to a pane in Tab B because it never sees Tab B's panes
-            // in the first place. We filter on the internal `full_id`
-            // (the long `tab-<uuid>::pane-N` form), since the public
-            // `id` field is now a short tab-relative `pane-N`.
-            let self_tab = tab_prefix(self_id);
-            panes.retain(|p| tab_prefix(&p.full_id) == self_tab);
-            for p in &mut panes {
-                if &p.full_id == self_id {
-                    p.is_self = Some(true);
-                }
+        // Tab-scope filter: only show panes whose tab matches the
+        // caller's. This is what makes simultaneous multi-agent
+        // tabs safe — a pane in Tab A can't accidentally dispatch
+        // to a pane in Tab B because it never sees Tab B's panes
+        // in the first place. We filter on the internal `full_id`
+        // (the long `tab-<uuid>::pane-N` form), since the public
+        // `id` field is now a short tab-relative `pane-N`.
+        let self_tab = tab_prefix(self_id);
+        panes.retain(|p| tab_prefix(&p.full_id) == self_tab);
+        for p in &mut panes {
+            if &p.full_id == self_id {
+                p.is_self = Some(true);
             }
         }
         let payload = serde_json::to_string_pretty(&panes).unwrap_or_default();
         Ok(CallToolResult::success(vec![Content::text(payload)]))
     }
 
-    #[tool(
-        description = "Send text to a pane's stdin and (by default) wait for \
+    #[tool(description = "Send text to a pane's stdin and (by default) wait for \
 the CLI to idle. From the target pane's POV the input is indistinguishable \
 from human typing — no special framing, no source flag. A carriage return is \
 auto-appended (set submit=false to disable). wait=true (default) blocks until \
 idle or timeout (default 600s) and returns the new output. wait=false returns \
 immediately; poll read_pane later for long tasks. Self-dispatch is rejected. \
-Per-pane sentinel mode is restricted to the caller's own tab; the global \
-Hyper-Agent admin endpoint can dispatch to any pane in any tab."
-    )]
+Per-pane sentinel mode is restricted to the caller's own tab.")]
     async fn send_to_pane(
         &self,
         Parameters(args): Parameters<SendToPaneArgs>,
     ) -> Result<CallToolResult, McpError> {
+        let Some(self_id) = &self.self_pane_id else {
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::json!({
+                    "status": "failed",
+                    "error": "anonymous MCP control is disabled in this local safe build",
+                })
+                .to_string(),
+            )]));
+        };
         // Resolve the `id` arg: accept short forms (`pane-2`, `2`) and
         // expand them against the caller's tab. Keeps tool calls short
         // enough to render cleanly inside narrow grid panes.
-        let target_id = resolve_pane_id(&args.id, self.self_pane_id.as_deref());
+        let target_id = resolve_pane_id(&args.id, Some(self_id));
 
         // Reject self-dispatch up front — this MCP instance knows
         // exactly which pane it represents.
-        if let Some(self_id) = &self.self_pane_id {
-            if self_id == &target_id {
-                return Ok(CallToolResult::success(vec![Content::text(
-                    serde_json::json!({
-                        "status": "failed",
-                        "error": "cannot send_to_pane to self",
-                        "self_pane_id": self_id,
-                    })
-                    .to_string(),
-                )]));
-            }
-            // Cross-Tab guard: refuse to dispatch into a pane that
-            // belongs to a different multi-agent Tab. Without this,
-            // a 4-pane Tab A could accidentally pipe work into a
-            // 4-pane Tab B because both tabs share the same global
-            // SharedSession map. Mirrors the filtering done in
-            // `list_panes`.
-            let self_tab = tab_prefix(self_id);
-            let target_tab = tab_prefix(&target_id);
-            if self_tab != target_tab {
-                return Ok(CallToolResult::success(vec![Content::text(
-                    serde_json::json!({
-                        "status": "failed",
-                        "error": "target pane belongs to a different Tab; cross-Tab dispatch is not supported",
-                        "self_tab": self_tab,
-                        "target_tab": target_tab,
-                    })
-                    .to_string(),
-                )]));
-            }
+        if self_id == &target_id {
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::json!({
+                    "status": "failed",
+                    "error": "cannot send_to_pane to self",
+                    "self_pane_id": self_id,
+                })
+                .to_string(),
+            )]));
+        }
+        // Cross-Tab guard: refuse to dispatch into a pane that
+        // belongs to a different multi-agent Tab. Without this,
+        // a 4-pane Tab A could accidentally pipe work into a
+        // 4-pane Tab B because both tabs share the same global
+        // SharedSession map. Mirrors the filtering done in
+        // `list_panes`.
+        let self_tab = tab_prefix(self_id);
+        let target_tab = tab_prefix(&target_id);
+        if self_tab != target_tab {
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::json!({
+                    "status": "failed",
+                    "error": "target pane belongs to a different Tab; cross-Tab dispatch is not supported",
+                    "self_tab": self_tab,
+                    "target_tab": target_tab,
+                })
+                .to_string(),
+            )]));
         }
         let wait = args.wait.unwrap_or(true);
         let submit = args.submit.unwrap_or(true);
@@ -886,10 +888,7 @@ Hyper-Agent admin endpoint can dispatch to any pane in any tab."
         // Use the short `pane-N` form (not the long full id) so the
         // resulting prefix doesn't blow up the receiver's terminal
         // width either.
-        let dispatch_text = match &self.self_pane_id {
-            Some(self_id) => format!("[From {}] {}", pane_short(self_id), args.text),
-            None => args.text.clone(),
-        };
+        let dispatch_text = format!("[From {}] {}", pane_short(self_id), args.text);
 
         match self
             .panes
@@ -925,15 +924,22 @@ Hyper-Agent admin endpoint can dispatch to any pane in any tab."
         }
     }
 
-    #[tool(
-        description = "Read the most recent output lines from another pane. \
+    #[tool(description = "Read the most recent output lines from another pane. \
 Useful after a send_to_pane(wait=false) long task, to check progress or pull final output. \
-Returns plain text (ANSI stripped) and an is_idle flag."
-    )]
+Returns plain text (ANSI stripped) and an is_idle flag.")]
     async fn read_pane(
         &self,
         Parameters(args): Parameters<ReadPaneArgs>,
     ) -> Result<CallToolResult, McpError> {
+        if self.self_pane_id.is_none() {
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::json!({
+                    "status": "failed",
+                    "error": "anonymous MCP control is disabled in this local safe build",
+                })
+                .to_string(),
+            )]));
+        }
         // Accept short forms (`pane-2`, `2`) — same convenience as
         // send_to_pane.
         let target_id = resolve_pane_id(&args.id, self.self_pane_id.as_deref());
@@ -953,7 +959,6 @@ Returns plain text (ANSI stripped) and an is_idle flag."
             )])),
         }
     }
-
 }
 
 #[tool_handler]
@@ -966,9 +971,9 @@ impl ServerHandler for CoffeeMcp {
             instructions: Some(
                 "Coffee-CLI multi-agent MCP server. \
 Tools: list_panes, send_to_pane, read_pane. \
-Use these to coordinate ACROSS different CLIs (Claude/Codex/Gemini/OpenCode). \
+Use these to coordinate ACROSS different CLIs (Claude/Codex). \
 For intra-CLI parallelism, prefer your native subagent SDK (Agent Teams / app-server / TaskTool). \
-See CLAUDE.md / AGENTS.md / GEMINI.md in the workspace root for full protocol."
+See the injected pane instructions for the full protocol."
                     .to_string(),
             ),
         }
@@ -987,8 +992,9 @@ pub struct McpEndpoint {
     pub started_at: u64,
 }
 
-/// Axum middleware that (a) logs every incoming request for debugging
-/// and (b) works around rmcp 0.8.5's strict Accept-header check.
+/// Axum middleware that requires a per-process bearer token, logs incoming
+/// requests for debugging, and works around rmcp 0.8.5's strict Accept-header
+/// check.
 ///
 /// rmcp 0.8.5 StreamableHttpService returns **HTTP 406 Not Acceptable**
 /// unless the request's `Accept` header contains BOTH `application/json`
@@ -1000,12 +1006,38 @@ pub struct McpEndpoint {
 /// always proceeds. rmcp then decides response shape (JSON vs SSE) based
 /// on the request; both shapes are MCP-spec compliant.
 async fn mcp_request_middleware(
+    axum::extract::State(expected_token): axum::extract::State<Arc<String>>,
     mut req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
-    use axum::http::{header, HeaderValue};
+    use axum::{
+        http::{header, HeaderValue, StatusCode},
+        response::IntoResponse,
+    };
     let method = req.method().clone();
     let path = req.uri().path().to_string();
+    let auth_header = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|v| v == expected_token.as_str())
+        .unwrap_or(false);
+    let query_token = req
+        .uri()
+        .query()
+        .map(|q| {
+            q.split('&').any(|part| {
+                let mut it = part.splitn(2, '=');
+                matches!((it.next(), it.next()), (Some("token"), Some(v)) if v == expected_token.as_str())
+            })
+        })
+        .unwrap_or(false);
+    if !auth_header && !query_token {
+        log::warn!("[mcp] rejected unauthenticated {} {}", method, path);
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
     let accept_in = req
         .headers()
         .get(header::ACCEPT)
@@ -1036,10 +1068,10 @@ async fn mcp_request_middleware(
 ///
 /// `self_pane_id` bakes a specific pane identity into THIS server
 /// instance: every tool call to it is treated as coming from that pane.
-/// Pass `None` for an "anonymous" server (legacy / non-multi-agent),
-/// or `Some(pane_id)` to make `whoami()`, `is_self` in `list_panes`,
+/// Pass `Some(pane_id)` to make `whoami()`, `is_self` in `list_panes`,
 /// and `[From <id>]` prefixing in `send_to_pane` all work without the
-/// LLM needing to guess.
+/// LLM needing to guess. Passing `None` is unsupported in the local
+/// safe build and the MCP tools will return failure payloads.
 pub async fn spawn(
     panes: Arc<PaneStore>,
     self_pane_id: Option<String>,
@@ -1047,23 +1079,19 @@ pub async fn spawn(
     spawn_with_port(panes, self_pane_id, 0).await
 }
 
-/// Like `spawn`, but lets the caller request a specific port. Used by
-/// the Hyper-Agent global server to keep its URL stable across Coffee-CLI
-/// restarts — a stable URL means OpenClaw / Hermes Agent's config-file
-/// watchers don't see a change every launch (which would trigger their
-/// own gateway restarts and on OpenClaw also fire its mDNS/Ciao
-/// "PROBING CANCELLED" unhandled-rejection bug).
+/// Like `spawn`, but lets the caller request a specific port.
 ///
 /// `preferred_port = 0` falls back to OS-assigned (the per-pane sentinel
 /// servers want this — they're transient and ephemeral by design).
 ///
 /// If the preferred port is busy we silently fall back to OS-assigned
-/// rather than fail; the caller persists whatever port we got.
+/// rather than fail.
 pub async fn spawn_with_port(
     panes: Arc<PaneStore>,
     self_pane_id: Option<String>,
     preferred_port: u16,
 ) -> anyhow::Result<McpEndpoint> {
+    let token = Arc::new(uuid::Uuid::new_v4().to_string());
     let service = StreamableHttpService::new(
         {
             let panes = panes.clone();
@@ -1074,9 +1102,9 @@ pub async fn spawn_with_port(
         StreamableHttpServerConfig::default(),
     );
 
-    let router = axum::Router::new()
-        .nest_service("/mcp", service)
-        .layer(axum::middleware::from_fn(mcp_request_middleware));
+    let router = axum::Router::new().nest_service("/mcp", service).layer(
+        axum::middleware::from_fn_with_state(token.clone(), mcp_request_middleware),
+    );
     let listener = match preferred_port {
         0 => tokio::net::TcpListener::bind("127.0.0.1:0").await?,
         p => match tokio::net::TcpListener::bind(("127.0.0.1", p)).await {
@@ -1092,7 +1120,7 @@ pub async fn spawn_with_port(
     let addr = listener.local_addr()?;
 
     let endpoint = McpEndpoint {
-        url: format!("http://{}/mcp", addr),
+        url: format!("http://{}/mcp?token={}", addr, token),
         port: addr.port(),
         pid: std::process::id(),
         started_at: epoch_seconds(),
@@ -1136,11 +1164,10 @@ fn write_endpoint_file(endpoint: &McpEndpoint) -> anyhow::Result<()> {
 pub struct McpStateManifest {
     pub pid: u32,
     pub written_at: u64,
-    /// Anonymous (no `self_pane_id`) MCP server, only spawned when
-    /// non-Claude CLIs need global-config injection. May be absent
-    /// in a pure-Claude workspace.
+    /// Anonymous (no `self_pane_id`) MCP server. Always absent in the
+    /// local safe build; kept only for manifest backward compatibility.
     pub anonymous: Option<McpEndpoint>,
-    /// Per-pane MCP servers, one entry per multi-agent Claude pane.
+    /// Per-pane MCP servers, one entry per multi-agent Claude/Codex pane.
     pub panes: Vec<PaneEndpointEntry>,
 }
 

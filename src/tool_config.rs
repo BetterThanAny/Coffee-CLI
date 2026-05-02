@@ -8,42 +8,26 @@
 //! Schema:
 //! ```json
 //! {
-//!   "hermes": {
-//!     "command": "wsl",
-//!     "extra_args": ["~/.local/bin/hermes"],
-//!     "default_cwd": "",
-//!     "history_path": "\\\\wsl.localhost\\Ubuntu\\home\\user\\.hermes\\sessions"
-//!   },
 //!   "claude": {
-//!     "command": "",
-//!     "extra_args": ["--dangerously-skip-permissions"],
 //!     "default_cwd": "/home/user/work",
 //!     "history_path": ""
 //!   }
 //! }
 //! ```
 //!
-//! - `command`: full launch executable. Whitespace-split at spawn time —
-//!   first token is the binary, the rest are PREPENDED to args. So
-//!   `"wsl ~/.local/bin/hermes"` becomes argv `["wsl", "~/.local/bin/hermes"]`.
-//!   If empty, the built-in default (e.g. `"claude"` for the claude tool)
-//!   is used. NOT shell-parsed — paths with spaces are not supported in
-//!   v1; document the limitation.
-//! - `extra_args`: appended AFTER the built-in args (so `--mcp-config`
-//!   etc still come first). String list, NOT split.
+//! - `command` and `extra_args` are kept in the on-disk schema for backward
+//!   compatibility, but are ignored and rejected on write. Letting the
+//!   frontend choose launch binaries or flags turns a renderer compromise
+//!   into command execution.
 //! - `default_cwd`: pre-fills the cwd selector when starting a new tab
 //!   of this tool. Empty falls through to the launchpad's last-used cwd.
 //! - `history_path`: directory containing this tool's session history
 //!   files. Empty falls through to the built-in scan path. Used by the
 //!   history board's per-tool collectors.
 //!
-//! All four fields are independent — set just `extra_args` to add a flag
-//! without overriding the binary, set just `command` for a wrapper like
-//! `wsl`, etc.
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolConfigEntry {
@@ -92,9 +76,8 @@ pub fn save(cfg: &ToolConfig) -> std::io::Result<()> {
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let body = serde_json::to_string_pretty(cfg).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-    })?;
+    let body = serde_json::to_string_pretty(cfg)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
     // Atomic write so an interrupted save can't leave the file
     // half-written and unparseable on the next launch.
     let tmp = p.with_extension("json.tmp");
@@ -104,7 +87,38 @@ pub fn save(cfg: &ToolConfig) -> std::io::Result<()> {
 }
 
 pub fn get(tool: &str) -> ToolConfigEntry {
-    load().remove(tool).unwrap_or_default()
+    let mut entry = load().remove(tool).unwrap_or_default();
+
+    // Older configs may still contain command/argument overrides. Ignore them
+    // on read as well as rejecting them on write; otherwise stale local config
+    // could continue to hijack tool launches after an upgrade.
+    entry.command.clear();
+    entry.extra_args.clear();
+
+    if contains_control(&entry.default_cwd) {
+        entry.default_cwd.clear();
+    }
+    if contains_control(&entry.history_path) {
+        entry.history_path.clear();
+    }
+
+    if !entry.default_cwd.trim().is_empty() {
+        let valid = expand_path(&entry.default_cwd)
+            .canonicalize()
+            .map(|cwd| cwd.is_dir() && cwd.components().count() >= 3)
+            .unwrap_or(false);
+        if !valid {
+            entry.default_cwd.clear();
+        }
+    }
+
+    if !entry.history_path.trim().is_empty()
+        && validated_history_path(tool, &entry.history_path).is_none()
+    {
+        entry.history_path.clear();
+    }
+
+    entry
 }
 
 pub fn set(tool: &str, entry: ToolConfigEntry) -> std::io::Result<()> {
@@ -117,21 +131,76 @@ pub fn set(tool: &str, entry: ToolConfigEntry) -> std::io::Result<()> {
     save(&cfg)
 }
 
-/// Whitespace-split the user's `command` field into (binary, prefix_args).
-/// Returns (None, vec![]) for an empty string — caller falls through to
-/// built-in defaults in that case.
-pub fn parse_command(cmd: &str) -> (Option<String>, Vec<String>) {
-    let mut parts = cmd.split_whitespace();
-    let Some(bin) = parts.next() else {
-        return (None, vec![]);
-    };
-    let rest: Vec<String> = parts.map(|s| s.to_string()).collect();
-    (Some(bin.to_string()), rest)
+fn allowed_tool(tool: &str) -> bool {
+    matches!(tool, "claude" | "codex" | "terminal")
+}
+
+fn contains_control(s: &str) -> bool {
+    s.chars().any(|c| c == '\0' || c == '\n' || c == '\r')
+}
+
+fn normal_components(path: &Path) -> Vec<String> {
+    path.components()
+        .filter_map(|c| match c {
+            Component::Normal(s) => s.to_str().map(|v| v.to_string()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn history_path_matches_tool(tool: &str, path: &Path) -> bool {
+    let parts = normal_components(path);
+    match tool {
+        "claude" => parts.iter().any(|p| p == ".claude") && parts.iter().any(|p| p == "projects"),
+        "codex" => parts.iter().any(|p| p == ".codex") && parts.iter().any(|p| p == "sessions"),
+        _ => false,
+    }
+}
+
+pub fn validated_history_path(tool: &str, input: &str) -> Option<PathBuf> {
+    if input.trim().is_empty() || contains_control(input) {
+        return None;
+    }
+    let expanded = expand_path(input);
+    let canonical = expanded.canonicalize().ok()?;
+    if canonical.components().count() < 3 {
+        return None;
+    }
+    history_path_matches_tool(tool, &canonical).then_some(canonical)
+}
+
+pub fn validate_entry(tool: &str, entry: &ToolConfigEntry) -> Result<(), String> {
+    if !allowed_tool(tool) {
+        return Err(format!("Unsupported tool: {tool}"));
+    }
+    if !entry.command.trim().is_empty() {
+        return Err("Command overrides are disabled for security".to_string());
+    }
+    if !entry.extra_args.is_empty() {
+        return Err("Extra launch arguments are disabled for security".to_string());
+    }
+    if contains_control(&entry.default_cwd) || contains_control(&entry.history_path) {
+        return Err("Configuration contains control characters".to_string());
+    }
+    if !entry.default_cwd.trim().is_empty() {
+        let cwd = expand_path(&entry.default_cwd)
+            .canonicalize()
+            .map_err(|e| format!("Invalid default cwd: {e}"))?;
+        if !cwd.is_dir() || cwd.components().count() < 3 {
+            return Err("Default cwd must be a user project directory".to_string());
+        }
+    }
+    if !entry.history_path.trim().is_empty()
+        && validated_history_path(tool, &entry.history_path).is_none()
+    {
+        return Err("History path must point to that tool's session directory".to_string());
+    }
+    Ok(())
 }
 
 /// Expand a leading `~/` or bare `~` to the user's home directory.
 /// Used by both `default_cwd` and `history_path` overrides since users
-/// reasonably write `~/.hermes/sessions` and expect us to handle it.
+/// reasonably write `~/.claude/projects` and expect us to handle it.
 /// Windows paths (`\\wsl.localhost\...` / `C:\...`) and absolute Unix
 /// paths pass through unchanged.
 pub fn expand_path(input: &str) -> std::path::PathBuf {
@@ -141,7 +210,10 @@ pub fn expand_path(input: &str) -> std::path::PathBuf {
         }
         return std::path::PathBuf::from("~");
     }
-    if let Some(stripped) = input.strip_prefix("~/").or_else(|| input.strip_prefix("~\\")) {
+    if let Some(stripped) = input
+        .strip_prefix("~/")
+        .or_else(|| input.strip_prefix("~\\"))
+    {
         if let Some(home) = dirs::home_dir() {
             return home.join(stripped);
         }
@@ -153,11 +225,7 @@ pub fn expand_path(input: &str) -> std::path::PathBuf {
 /// (with ~ expansion) if set, else `default` (caller-supplied).
 pub fn history_path_for(tool: &str, default: std::path::PathBuf) -> std::path::PathBuf {
     let cfg = get(tool).history_path;
-    if cfg.is_empty() {
-        default
-    } else {
-        expand_path(&cfg)
-    }
+    validated_history_path(tool, &cfg).unwrap_or(default)
 }
 
 #[cfg(test)]
@@ -165,39 +233,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_simple() {
-        assert_eq!(parse_command(""), (None, vec![]));
-        assert_eq!(parse_command("claude"), (Some("claude".into()), vec![]));
-        assert_eq!(
-            parse_command("wsl ~/.local/bin/hermes"),
-            (Some("wsl".into()), vec!["~/.local/bin/hermes".into()])
-        );
-        assert_eq!(
-            parse_command("  docker exec mybox claude  "),
-            (
-                Some("docker".into()),
-                vec!["exec".into(), "mybox".into(), "claude".into()]
-            )
-        );
-    }
-
-    #[test]
     fn expand_path_handles_tilde_and_passthrough() {
         let home = dirs::home_dir().expect("test needs a home dir");
         // Tilde forms expand
         assert_eq!(expand_path("~"), home);
-        assert_eq!(expand_path("~/.hermes/sessions"), home.join(".hermes").join("sessions"));
+        assert_eq!(
+            expand_path("~/.claude/projects"),
+            home.join(".claude").join("projects")
+        );
         // Backslash form on Windows-style paths
-        assert_eq!(expand_path("~\\.hermes\\sessions"), home.join(".hermes\\sessions"));
+        assert_eq!(
+            expand_path("~\\.claude\\projects"),
+            home.join(".claude\\projects")
+        );
         // Non-tilde paths pass through verbatim — UNC, absolute Unix, drive letters
         assert_eq!(
-            expand_path("\\\\wsl.localhost\\Ubuntu\\home\\user\\.hermes"),
-            std::path::PathBuf::from("\\\\wsl.localhost\\Ubuntu\\home\\user\\.hermes"),
+            expand_path("\\\\wsl.localhost\\Ubuntu\\home\\user\\.claude"),
+            std::path::PathBuf::from("\\\\wsl.localhost\\Ubuntu\\home\\user\\.claude"),
         );
-        assert_eq!(expand_path("/abs/unix/path"), std::path::PathBuf::from("/abs/unix/path"));
-        assert_eq!(expand_path("C:\\Users\\someone"), std::path::PathBuf::from("C:\\Users\\someone"));
+        assert_eq!(
+            expand_path("/abs/unix/path"),
+            std::path::PathBuf::from("/abs/unix/path")
+        );
+        assert_eq!(
+            expand_path("C:\\Users\\someone"),
+            std::path::PathBuf::from("C:\\Users\\someone")
+        );
         // Tilde-in-middle does NOT expand (only leading)
-        assert_eq!(expand_path("/foo/~/bar"), std::path::PathBuf::from("/foo/~/bar"));
+        assert_eq!(
+            expand_path("/foo/~/bar"),
+            std::path::PathBuf::from("/foo/~/bar")
+        );
     }
 
     #[test]

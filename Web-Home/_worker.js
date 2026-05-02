@@ -4,6 +4,8 @@
 // Routes:
 //   /version.json          → dynamic version report (honors ?platform=)
 //   /download/<platform>   → proxy GitHub Release assets
+//   /download/<platform>.sha256
+//                         → SHA-256 digest of the proxied release asset
 //   /play/<file>           → CF Pages static (.jsdos shipped under
 //                            Web-Home/play/, edge-cached)
 //   /*                     → CF Pages static files (env.ASSETS)
@@ -22,6 +24,12 @@ const PLATFORM_PATTERNS = {
   "linux-appimage":       (name) => name.endsWith("amd64.AppImage"),
   "linux-arm64-deb":      (name) => name.endsWith("arm64.deb"),
   "linux-arm64-appimage": (name) => name.endsWith("aarch64.AppImage"),
+}
+
+function toHex(buffer) {
+  return [...new Uint8Array(buffer)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
 }
 
 async function getLatestAssets(env) {
@@ -64,9 +72,13 @@ async function getLatestAssets(env) {
   const assets = {}
   for (const [platform, match] of Object.entries(PLATFORM_PATTERNS)) {
     const asset = release.assets.find(a => match(a.name))
+    const checksum = asset
+      ? release.assets.find(a => a.name === `${asset.name}.sha256`)
+      : null
     if (asset) assets[platform] = {
       url: asset.browser_download_url,
       name: asset.name,
+      checksumUrl: checksum?.browser_download_url ?? null,
       // Strip the leading "v" from the git tag name so `version` is a
       // clean semver. install.ps1 / install.sh prepend their own "v"
       // when displaying, and compare against the Windows registry
@@ -147,10 +159,11 @@ export default {
       }
     }
 
-    // ── /download/<platform> ─────────────────────────────────────────────────
-    const dlMatch = pathname.match(/^\/download\/([a-z0-9-]+)$/)
+    // ── /download/<platform> and /download/<platform>.sha256 ────────────────
+    const dlMatch = pathname.match(/^\/download\/([a-z0-9-]+)(\.sha256)?$/)
     if (dlMatch) {
       const platform = dlMatch[1]
+      const wantsChecksum = Boolean(dlMatch[2])
       if (!PLATFORM_PATTERNS[platform]) {
         return new Response(
           `Unknown platform "${platform}". Available: ${Object.keys(PLATFORM_PATTERNS).join(", ")}`,
@@ -170,9 +183,43 @@ export default {
         return new Response(`No asset found for "${platform}"`, { status: 404 })
       }
 
+      if (wantsChecksum && asset.checksumUrl) {
+        const checksumRes = await fetch(asset.checksumUrl, {
+          headers: { "User-Agent": "CoffeeCLI-Worker" }
+        })
+        if (checksumRes.ok) {
+          return new Response(checksumRes.body, {
+            status: 200,
+            headers: {
+              "Content-Type": "text/plain; charset=utf-8",
+              "Cache-Control": "public, max-age=300",
+              "Access-Control-Allow-Origin": "*",
+            }
+          })
+        }
+      }
+
       const fileRes = await fetch(asset.url, {
         headers: { "User-Agent": "CoffeeCLI-Worker" }
       })
+
+      if (!fileRes.ok) {
+        return new Response(`Failed to fetch asset: ${fileRes.status}`, { status: 502 })
+      }
+
+      if (wantsChecksum) {
+        const bytes = await fileRes.arrayBuffer()
+        const digest = await crypto.subtle.digest("SHA-256", bytes)
+        return new Response(`${toHex(digest)}  ${asset.name}\n`, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "public, max-age=300",
+            "Access-Control-Allow-Origin": "*",
+          }
+        })
+      }
+
       return new Response(fileRes.body, {
         status: 200,
         headers: {

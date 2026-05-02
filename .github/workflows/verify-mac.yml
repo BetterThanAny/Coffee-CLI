@@ -7,6 +7,7 @@ name: Verify macOS bundle
 #
 # Pass criteria:
 #   - codesign succeeds on the bundle
+#   - bundle is signed by a Developer ID Application certificate
 #   - "Sealed Resources" is NOT "none"
 #   - spctl assessment doesn't report "code has no resources"
 #
@@ -56,6 +57,30 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
+      - name: Import Apple signing certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -z "${APPLE_CERTIFICATE:-}" ] || [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ] || [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            echo "::error::APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, and APPLE_SIGNING_IDENTITY secrets are required to verify release signing"
+            exit 1
+          fi
+
+          CERT_PATH="$RUNNER_TEMP/apple-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
       - name: Build .app (no publish)
         run: cargo tauri build --target aarch64-apple-darwin
 
@@ -71,23 +96,14 @@ jobs:
           echo "Found: $APP"
           echo "app=$APP" >> "$GITHUB_OUTPUT"
 
-      - name: Re-sign bundle without hardened runtime
-        # v1.6.5 set tauri.conf.json bundle.macOS.signingIdentity = "-"
-        # which caused tauri-bundler to codesign with --options runtime,
-        # i.e. enable hardened runtime. Hardened runtime + adhoc + no
-        # Apple notarization = Gatekeeper rejects, app launches but the
-        # GUI is silently killed (user reports "click icon, no reaction").
-        #
-        # Instead we let Tauri produce its default linker-signed binary
-        # (no resource sealing, no runtime flag), then ourselves run
-        # codesign --force --deep --sign - to seal resources WITHOUT
-        # passing --options runtime. End state: flags=0x2(adhoc),
-        # Sealed Resources present, Gatekeeper accepts (well, "rejected"
-        # by spctl for adhoc, but LaunchServices honors user trust).
+      - name: Sign bundle with Developer ID
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           APP="${{ steps.locate.outputs.app }}"
-          codesign --force --deep --sign - "$APP"
-          echo "=== post-resign codesign -dv ==="
+          codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP"
+          codesign --verify --deep --strict "$APP"
+          echo "=== post-sign codesign -dv ==="
           codesign -dv --verbose=4 "$APP" 2>&1
 
       - name: Inspect signature (the actual test)
@@ -117,13 +133,18 @@ jobs:
             echo "OK: Sealed Resources are present"
           fi
 
-          # Hardened runtime should NOT be on — that was the v1.6.5 bug.
-          # Look for "runtime" in the flags description.
-          if grep -qE "flags=.*runtime" /tmp/sig.log; then
-            echo "::error::flags include 'runtime' — hardened runtime requires Apple notarization to pass Gatekeeper. Same bug as v1.6.5."
+          if grep -q "Signature=adhoc" /tmp/sig.log; then
+            echo "::error::Bundle is ad-hoc signed"
             FAIL=1
           else
-            echo "OK: no hardened runtime flag"
+            echo "OK: signature is not ad-hoc"
+          fi
+
+          if grep -q "Authority=Developer ID Application" /tmp/sig.log; then
+            echo "OK: Developer ID Application authority present"
+          else
+            echo "::error::Developer ID Application authority missing"
+            FAIL=1
           fi
 
           # spctl shouldn't complain about missing resources.

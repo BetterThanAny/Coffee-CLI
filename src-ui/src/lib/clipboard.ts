@@ -1,16 +1,13 @@
 // clipboard.ts — unified clipboard I/O for the entire UI.
 //
-// All clipboard reads/writes MUST go through these helpers. Direct
-// `navigator.clipboard.*` and `document.execCommand('copy'|'paste')`
-// calls are banned in this codebase because WebView2 shows a native
-// "tauri.localhost wants to read the clipboard" permission prompt on
-// every invocation, which destroys UX — especially on right-click
-// paste. Tauri's clipboard-manager plugin bypasses that prompt.
+// All clipboard reads/writes MUST go through these helpers. Writes use
+// Tauri's plugin for reliable desktop UX; reads intentionally use the browser
+// Clipboard API so the WebView permission model still applies.
 //
 // If you need a new context menu or keyboard shortcut that touches
 // the clipboard, import from here. Do not re-derive.
 
-import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 /** Write text to the system clipboard. Silently swallows failures
  *  because clipboard writes are always best-effort UX glue — we never
@@ -23,5 +20,8 @@ export function clipboardWrite(text: string): Promise<void> {
  *  failure (empty clipboard, permission denied, etc.) so callers can
  *  do a simple `if (text)` check without try/catch boilerplate. */
 export function clipboardRead(): Promise<string> {
-  return readText().then(t => t ?? '').catch(() => '');
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+    return Promise.resolve('');
+  }
+  return navigator.clipboard.readText().then(t => t ?? '').catch(() => '');
 }

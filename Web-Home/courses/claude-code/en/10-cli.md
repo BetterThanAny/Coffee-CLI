@@ -185,7 +185,6 @@ claude -p --system-prompt-file ./prompts/code-reviewer.txt "review main.py"
 | `--tools` | Restrict available built-in tools | `claude -p --tools "Bash,Edit,Read" "query"` |
 | `--allowedTools` | Tools that execute without prompting | `"Bash(git log:*)" "Read"` |
 | `--disallowedTools` | Tools removed from context | `"Bash(rm:*)" "Edit"` |
-| `--dangerously-skip-permissions` | Skip all permission prompts | `claude --dangerously-skip-permissions` |
 | `--permission-mode` | Begin in specified permission mode | `claude --permission-mode auto` |
 | `--permission-prompt-tool` | MCP tool for permission handling | `claude -p --permission-prompt-tool mcp_auth "query"` |
 | `--enable-auto-mode` | Unlock auto permission mode | `claude --enable-auto-mode` |
@@ -848,7 +847,7 @@ claude -p --output-format json "query"
 **Solutions:**
 - Check `--permission-mode` setting
 - Review `--allowedTools` and `--disallowedTools` flags
-- Use `--dangerously-skip-permissions` for automation (with caution)
+- Prefer a scoped `--permission-mode` or explicit allowlist for automation
 
 ---
 

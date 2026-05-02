@@ -250,8 +250,7 @@ function TierTerminalImpl({
 
   const toolLabel: Record<string, string> = {
     claude: 'Claude Code',
-    qwen: 'Qwen Code', hermes: 'Hermes Agent', opencode: 'OpenCode', openclaw: 'OpenClaw',
-    codex: 'Codex CLI', gemini: 'Gemini CLI',
+    codex: 'Codex CLI',
     remote: t('tool.remote'), terminal: t('tool.terminal'),
   };
 
@@ -476,12 +475,6 @@ function TierTerminalImpl({
 
     const startPty = async () => {
       try {
-      let remoteConfig: any = {};
-      try {
-        if (tool === 'remote' && toolData) remoteConfig = JSON.parse(toolData);
-      } catch (e) {}
-      let hasInjectedPassword = false;
-
       // Subscribe to PTY events via the singleton bus. One listen() call per
       // event type lives in the bus; we just register per-session handlers
       // into a Map. No N-tab fan-out on hot path.
@@ -490,16 +483,6 @@ function TierTerminalImpl({
           if (!mounted) return;
           hasOutputRef.current = true;
           xtermRef.current?.write(data);
-
-          // Handle SSH Auto-login via Password injection
-          if (tool === 'remote' && remoteConfig.protocol === 'ssh' && remoteConfig.password && !hasInjectedPassword) {
-            if (data.toLowerCase().includes('password:')) {
-              hasInjectedPassword = true;
-              setTimeout(() => {
-                commands.tierTerminalRawWrite(sessionId, remoteConfig.password + '\r').catch(() => {});
-              }, 200);
-            }
-          }
 
           // Track alt-screen flag for other TUI heuristics (splash, focus).
           // Agent status is now driven by hooks via agent-status-bus, not PTY scraping.

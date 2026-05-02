@@ -3,7 +3,7 @@
 // Same pane grid shape as MultiAgentGrid but with ZERO coordination:
 //   - No MCP server injection into the user's CLI configs
 //   - No `.multi-agent/` meta directory written to the workspace
-//   - No CLAUDE.md / AGENTS.md / GEMINI.md thin-pointers
+//   - No CLAUDE.md / AGENTS.md thin-pointers
 //   - Each pane is a plain independent PTY session; each pane can also
 //     point at its own folder (see onSelectTool → folder picker below).
 //
@@ -13,18 +13,14 @@
 //     (so the TitleBar layout toggle should be hidden by the caller).
 //
 // Kept verbatim from MultiAgentGrid:
-//   - PANE_CLI_OPTIONS restricted to Claude / Codex / Gemini (same 3 CLIs)
+//   - PANE_CLI_OPTIONS restricted to Claude / Codex
 //   - Focus dimming, pane number badge with hover-× close, CSS classes
 //     (reuses .multi-agent-grid-standalone styling — pure visual parity)
 //   - Session id format `${tabId}::split-${paneIdx}` — distinct from the
-//     multi-agent `::pane-` prefix on purpose. The backend `tier_terminal`
-//     spawn path keys off `::pane-` to decide whether to inject hands-free
-//     flags (`--dangerously-skip-permissions` / `--full-auto` /
-//     `--approval-mode yolo`). Independent split is NOT orchestrated — the
-//     user watches each pane and approves tool calls manually — so we want
-//     those flags off. Keeping the prefix separate prevents accidental
-//     auto-approve leakage. It also keeps FourSplit panes out of any
-//     cross-pane sentinel / Gambit addressing that keys off `::pane-`.
+//     multi-agent `::pane-` prefix on purpose. Independent split is NOT
+//     orchestrated: the user watches each pane and approves tool calls
+//     manually. Keeping the prefix separate also keeps FourSplit panes out
+//     of cross-pane sentinel / Gambit addressing that keys off `::pane-`.
 
 import { useEffect, useState } from 'react';
 import { useAppState, type TerminalSession, type ToolType, type MultiAgentPane } from '../../store/app-state';
@@ -50,22 +46,13 @@ interface Props {
 const PANE_CLI_OPTIONS: Array<{ value: ToolType; label: string }> = [
   { value: 'claude', label: 'Claude Code' },
   { value: 'codex', label: 'Codex' },
-  { value: 'gemini', label: 'Gemini' },
-  { value: 'opencode', label: 'OpenCode' },
-  { value: 'openclaw', label: 'OpenClaw' },
-  { value: 'hermes', label: 'Hermes Agent' },
 ];
-
-// OpenClaw (persona forge) and Hermes Agent are directory-agnostic — they
-// operate on global state, not a project folder. Skip the folder picker
-// when a pane picks one of these, matching the Desktop launchpad behavior.
-const CWD_AGNOSTIC_TOOLS: ReadonlySet<ToolType> = new Set<ToolType>(['openclaw', 'hermes']);
 
 export function FourSplitGrid({ tab, hasBg, bgUrl, bgType, paneCount = 4 }: Props) {
   const { state, dispatch } = useAppState();
   const [focusedPaneIdx, setFocusedPaneIdx] = useState<number | null>(null);
 
-  // Detect which of the 6 pane-eligible CLIs are actually installed so the
+  // Detect which of the pane-eligible CLIs are actually installed so the
   // picker can grey out the ones the user doesn't have (same visual
   // language as the Desktop launchpad — see .launchpad-card-disabled).
   // Runs once on mount; missing keys default to `true` to avoid a
@@ -98,18 +85,6 @@ export function FourSplitGrid({ tab, hasBg, bgUrl, bgType, paneCount = 4 }: Prop
   // - If the user cancels the picker, we do nothing (pane stays empty).
   // - Picker failure is logged but silent in UI — user can just re-click.
   const onSelectTool = async (paneIdx: number, tool: ToolType) => {
-    // cwd-agnostic tools (OpenClaw / Hermes Agent) skip the folder picker
-    // entirely — they don't bind to a project directory. TierTerminal will
-    // fall back to tab.folderPath (or the process cwd) when spawning.
-    if (CWD_AGNOSTIC_TOOLS.has(tool)) {
-      dispatch({
-        type: 'SET_PANE_TOOL',
-        tabId: tab.id,
-        paneIdx,
-        tool,
-      });
-      return;
-    }
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const selected = await open({ directory: true });

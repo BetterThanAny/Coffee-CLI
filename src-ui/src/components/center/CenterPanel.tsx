@@ -5,7 +5,6 @@ import { DosPlayer } from './DosPlayer';
 import { ChatReader } from './ChatReader';
 import { MultiAgentGrid } from './MultiAgentGrid';
 import { FourSplitGrid } from './FourSplitGrid';
-import { HyperAgentPanel } from './HyperAgentPanel';
 import { ToolConfigModal } from './ToolConfigModal';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { useAppState, type ToolType } from '../../store/app-state';
@@ -57,13 +56,6 @@ const toolIcon = (src: string, size = '1em', extra: React.CSSProperties = {}) =>
 // identically each time, and browsers scope gradient refs per-element.
 const CLAUDE_SVG    = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" width="100%" height="100%"><path clip-rule="evenodd" d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z" fill="#D97757" fill-rule="evenodd"/></svg>';
 const CODEX_SVG     = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%"><defs><linearGradient gradientUnits="userSpaceOnUse" id="codex-fill" x1="12" x2="12" y1="3" y2="21"><stop stop-color="#B1A7FF"/><stop offset=".5" stop-color="#7A9DFF"/><stop offset="1" stop-color="#3941FF"/></linearGradient></defs><path d="M19.503 0H4.496A4.496 4.496 0 000 4.496v15.007A4.496 4.496 0 004.496 24h15.007A4.496 4.496 0 0024 19.503V4.496A4.496 4.496 0 0019.503 0z" fill="#fff"/><path d="M9.064 3.344a4.578 4.578 0 012.285-.312c1 .115 1.891.54 2.673 1.275.01.01.024.017.037.021a.09.09 0 00.043 0 4.55 4.55 0 013.046.275l.047.022.116.057a4.581 4.581 0 012.188 2.399c.209.51.313 1.041.315 1.595a4.24 4.24 0 01-.134 1.223.123.123 0 00.03.115c.594.607.988 1.33 1.183 2.17.289 1.425-.007 2.71-.887 3.854l-.136.166a4.548 4.548 0 01-2.201 1.388.123.123 0 00-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838-1.187-.006-2.239-.44-3.157-1.302a.107.107 0 00-.105-.024c-.388.125-.78.143-1.204.138a4.441 4.441 0 01-1.945-.466 4.544 4.544 0 01-1.61-1.335c-.152-.202-.303-.392-.414-.617a5.81 5.81 0 01-.37-.961 4.582 4.582 0 01-.014-2.298.124.124 0 00.006-.056.085.085 0 00-.027-.048 4.467 4.467 0 01-1.034-1.651 3.896 3.896 0 01-.251-1.192 5.189 5.189 0 01.141-1.6c.337-1.112.982-1.985 1.933-2.618.212-.141.413-.251.601-.33.215-.089.43-.164.646-.227a.098.098 0 00.065-.066 4.51 4.51 0 01.829-1.615 4.535 4.535 0 011.837-1.388zm3.482 10.565a.637.637 0 000 1.272h3.636a.637.637 0 100-1.272h-3.636zM8.462 9.23a.637.637 0 00-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 101.095.649l1.454-2.455a.636.636 0 00.005-.64L8.462 9.23z" fill="url(#codex-fill)"/></svg>';
-const GEMINI_SVG    = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%"><defs><linearGradient gradientUnits="userSpaceOnUse" id="gemini-fill" x1="24" x2="0" y1="6.587" y2="16.494"><stop stop-color="#EE4D5D"/><stop offset=".328" stop-color="#B381DD"/><stop offset=".476" stop-color="#207CFE"/></linearGradient></defs><path d="M0 4.391A4.391 4.391 0 014.391 0h15.217A4.391 4.391 0 0124 4.391v15.217A4.391 4.391 0 0119.608 24H4.391A4.391 4.391 0 010 19.608V4.391z" fill="url(#gemini-fill)"/><path clip-rule="evenodd" d="M19.74 1.444a2.816 2.816 0 012.816 2.816v15.48a2.816 2.816 0 01-2.816 2.816H4.26a2.816 2.816 0 01-2.816-2.816V4.26A2.816 2.816 0 014.26 1.444h15.48zM7.236 8.564l7.752 3.728-7.752 3.727v2.802l9.557-4.596v-3.866L7.236 5.763v2.801z" fill="#1E1E2E" fill-rule="evenodd"/></svg>';
-const QWEN_SVG      = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%"><defs><linearGradient id="qwen-fill" x1="0%" x2="100%" y1="0%" y2="0%"><stop offset="0%" stop-color="#6336E7" stop-opacity=".84"/><stop offset="100%" stop-color="#6F69F7" stop-opacity=".84"/></linearGradient></defs><path d="M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16-.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z" fill="url(#qwen-fill)" fill-rule="nonzero"/></svg>';
-// OpenClaw brand (lobster mascot) — ported from Web-Home/agents/icons/openclaw.svg.
-// Gradient IDs stay verbatim from the source asset; browsers scope them per-<svg>
-// so multiple mounts don't clash.
-const OPENCLAW_SVG  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%"><path d="M12 2.568c-6.33 0-9.495 5.275-9.495 9.495 0 4.22 3.165 8.44 6.33 9.494v2.11h2.11v-2.11s1.055.422 2.11 0v2.11h2.11v-2.11c3.165-1.055 6.33-5.274 6.33-9.494S18.33 2.568 12 2.568z" fill="url(#oc0)"/><path d="M3.56 9.953C.396 8.898-.66 11.008.396 13.118c1.055 2.11 3.164 1.055 4.22-1.055.632-1.477 0-2.11-1.056-2.11z" fill="url(#oc1)"/><path d="M20.44 9.953c3.164-1.055 4.22 1.055 3.164 3.165-1.055 2.11-3.164 1.055-4.22-1.055-.632-1.477 0-2.11 1.056-2.11z" fill="url(#oc2)"/><path d="M5.507 1.875c.476-.285 1.036-.233 1.615.037.577.27 1.223.774 1.937 1.488a.316.316 0 01-.447.447c-.693-.693-1.279-1.138-1.757-1.361-.475-.222-.795-.205-1.022-.069a.317.317 0 01-.326-.542zM16.877 1.913c.58-.27 1.14-.323 1.616-.038a.317.317 0 01-.326.542c-.227-.136-.547-.153-1.022.069-.478.223-1.064.668-1.756 1.361a.316.316 0 11-.448-.447c.714-.714 1.36-1.218 1.936-1.487z" fill="#FF4D4D"/><path d="M8.835 9.109a1.266 1.266 0 100-2.532 1.266 1.266 0 000 2.532zM15.165 9.109a1.266 1.266 0 100-2.532 1.266 1.266 0 000 2.532z" fill="#050810"/><path d="M9.046 8.16a.527.527 0 100-1.056.527.527 0 000 1.055zM15.376 8.16a.527.527 0 100-1.055.527.527 0 000 1.054z" fill="#00E5CC"/><defs><linearGradient gradientUnits="userSpaceOnUse" id="oc0" x1="-.659" x2="27.023" y1=".458" y2="22.855"><stop stop-color="#FF4D4D"/><stop offset="1" stop-color="#991B1B"/></linearGradient><linearGradient gradientUnits="userSpaceOnUse" id="oc1" x1="0" x2="4.311" y1="9.672" y2="14.949"><stop stop-color="#FF4D4D"/><stop offset="1" stop-color="#991B1B"/></linearGradient><linearGradient gradientUnits="userSpaceOnUse" id="oc2" x1="19.385" x2="24.399" y1="9.953" y2="14.462"><stop stop-color="#FF4D4D"/><stop offset="1" stop-color="#991B1B"/></linearGradient></defs></svg>';
-
 const inlineSvgIcon = (markup: string, size = '1em', extra: React.CSSProperties = {}) => (
   <span
     aria-hidden
@@ -87,22 +79,12 @@ const inlineSvgIcon = (markup: string, size = '1em', extra: React.CSSProperties 
 // that tightly frames the visible mark so the container fills without
 // dead padding.
 const SvgClaude    = () => inlineSvgIcon(CLAUDE_SVG);
-const SvgQwen      = () => inlineSvgIcon(QWEN_SVG);
-// OpenCode uses the official square apple-touch-icon-v3.png from
-// opencode.ai (180×180 RGBA, dark rounded square + white frame + grey
-// inner block). The previous hand-drawn SVG approximation got the
-// proportions wrong; using the brand asset directly guarantees parity
-// with the official app icon and matches Codex/Gemini's square fill.
-const SvgOpenCode  = () => toolIcon('/icons/tools/opencode.png', '1em', { borderRadius: 'var(--radius-xs)', objectFit: 'cover' });
-const SvgOpenClaw  = () => inlineSvgIcon(OPENCLAW_SVG);
 const SvgCodex     = () => inlineSvgIcon(CODEX_SVG);
-const SvgGemini    = () => inlineSvgIcon(GEMINI_SVG);
 // PNG-backed icons stay as <img> — tiny raster bitmaps don't benefit
 // from inlining (base64 would bloat the bundle more than the HTTP
 // round-trip they skip). They're small enough to load under a frame
 // on warm cache.
 const SvgVibeID    = () => toolIcon('/icons/tools/vibeid.png');
-const SvgHermes    = () => toolIcon('/icons/tools/hermes.png', '1em', { borderRadius: 'var(--radius-xs)', objectFit: 'cover' });
 
 // Coffee 101 card icon — animated coffee mark (same as the left-panel
 // brand header in Explorer.tsx panel-header): steam wave loops 3s, cup
@@ -258,37 +240,6 @@ const SvgFourSplit = () => (
   </svg>
 );
 
-// Hyper-Agent — central admin node with radiating connections to four
-// satellite agent nodes. Evokes "one orchestrator commanding a team
-// across all panes". Single accent color, mix of filled center + smaller
-// satellite dots so the hub-and-spokes structure reads at icon size.
-const SvgHyperAgent = () => (
-  <svg
-    width="1em"
-    height="1em"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ flexShrink: 0, color: 'var(--accent)', verticalAlign: '-0.125em' }}
-  >
-    {/* Connection lines from center to each satellite */}
-    <line x1="12" y1="12" x2="5"  y2="5"  />
-    <line x1="12" y1="12" x2="19" y2="5"  />
-    <line x1="12" y1="12" x2="5"  y2="19" />
-    <line x1="12" y1="12" x2="19" y2="19" />
-    {/* Central admin node — filled */}
-    <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-    {/* Four satellite agent nodes — outlined */}
-    <circle cx="5"  cy="5"  r="2" />
-    <circle cx="19" cy="5"  r="2" />
-    <circle cx="5"  cy="19" r="2" />
-    <circle cx="19" cy="19" r="2" />
-  </svg>
-);
-
 // Two-Agent (coordination) — hollow outer frame with one internal divider.
 // Shared outer border = same workspace; internal line = two cooperating panes.
 const SvgTwoAgent = () => (
@@ -401,14 +352,11 @@ export function CenterPanel() {
         try { localStorage.setItem('coffee_pinned_items', JSON.stringify(arr)); } catch {}
         return arr;
       }
-      // First launch: pre-pin 6 useful defaults so desktop shows a full MAX_PINS
-      // grid out of the box (4 AI CLIs covering major providers + 2 utilities).
+      // First launch: pre-pin the locally enabled agents plus daily utilities.
       // Returning users' pin choices are respected (stored !== null path above).
       const defaults = [
         'agent:claude',
         'agent:codex',
-        'agent:opencode',
-        'agent:gemini',
         'agent:multi-agent',
         'agent:terminal',
       ];
@@ -426,84 +374,17 @@ export function CenterPanel() {
   // network dependency surface. Games still load remotely — see gamesLoading.
   const [gamesLoading, setGamesLoading] = useState<boolean>(true);
 
-  // Auto-sync the VibeID skill on every launch. Small files (SKILL.md,
-  // matrix.json, scripts) are re-fetched every time (~10 KB total, <1s on
-  // normal networks) so existing users automatically pick up skill logic
-  // upgrades without manually deleting ~/.claude/skills/vibeid/. Persona
-  // images (~2 MB) are downloaded only on first install.
-  useEffect(() => {
-    if (!isTauri) return;
-    (async () => {
-      const BASE = 'https://coffeecli.com/CC-VibeID-test';
-      // 16 Vibetype codes: mind (R/E) × craft (D/T) × arc (V/A) × flow (L/H).
-      // Grouped by family: Logos (RD*), Forge (RT*), Muse (ED*), Kinetic (ET*).
-      // Must match matrix.json persona keys and the actual PNG filenames at
-      // ${BASE}/personas/images/<code>.png.
-      const CODES = [
-        'RDVL','RDVH','RDAL','RDAH','RTVL','RTVH','RTAL','RTAH',
-        'EDVL','EDVH','EDAL','EDAH','ETVL','ETVH','ETAL','ETAH',
-      ];
-      const textFiles = [
-        { remote: 'SKILL.md', local: 'SKILL.md' },
-        { remote: 'matrix.json', local: 'matrix.json' },
-        { remote: 'scripts/analyze.js', local: 'scripts/analyze.js' },
-        { remote: 'scripts/inject.js', local: 'scripts/inject.js' },
-      ];
-      const pullText = async (f: { remote: string; local: string }) => {
-        const res = await fetch(`${BASE}/${f.remote}`);
-        if (!res.ok) throw new Error(`${f.remote}: ${res.status}`);
-        const bytes = new TextEncoder().encode(await res.text());
-        await commands.writeSkillFile(f.local, Array.from(bytes));
-      };
-      const pullBinary = async (f: { remote: string; local: string }) => {
-        const res = await fetch(`${BASE}/${f.remote}`);
-        if (!res.ok) throw new Error(`${f.remote}: ${res.status}`);
-        const buf = new Uint8Array(await res.arrayBuffer());
-        await commands.writeSkillFile(f.local, Array.from(buf));
-      };
-      try {
-        // Always keep SKILL.md / matrix / scripts fresh.
-        await Promise.all(textFiles.map(pullText));
-
-        // Fetch persona images only if this is a fresh install.
-        const installed = await commands.checkSkillInstalled('vibeid').catch(() => true);
-        if (!installed) {
-          const imageFiles = CODES.map(c => ({
-            remote: `personas/images/${c}.png`,
-            local: `images/${c}.png`,
-          }));
-          await Promise.all(imageFiles.map(pullBinary));
-          console.log('[vibeid] first-time install complete (images + logic)');
-        } else {
-          console.log('[vibeid] skill logic synced (images already present)');
-        }
-      } catch (err) {
-        console.warn('[vibeid] skill sync failed:', err);
-      }
-    })();
-  }, []);
-
   // Built-in inline SVG icons keyed by agent id. Used when catalog entry id matches;
   // otherwise falls back to entry.icon URL.
   const BUILTIN_ICONS: Record<string, React.ReactNode> = {
     claude: <SvgClaude />,
-    opencode: <SvgOpenCode />,
-    openclaw: <SvgOpenClaw />,
     codex: <SvgCodex />,
-    gemini: <SvgGemini />,
-    qwen: <SvgQwen />,
-    hermes: <SvgHermes />,
   };
 
   // Built-in AI CLI catalog. Fully local — no remote fetch.
   const BUILTIN_AI_CLI_FALLBACK: { key: ToolType; label: string }[] = [
     { key: 'claude', label: 'Claude Code' },
-    { key: 'opencode', label: 'OpenCode' },
-    { key: 'openclaw', label: 'OpenClaw' },
     { key: 'codex', label: 'Codex CLI' },
-    { key: 'gemini', label: 'Gemini CLI' },
-    { key: 'qwen', label: 'Qwen Code' },
-    { key: 'hermes', label: 'Hermes Agent' },
   ];
 
   // Unified agent catalog — fully local. The remote catalog fetch
@@ -514,16 +395,12 @@ export function CenterPanel() {
   // - `type`: semantic category ('ai-cli' | 'utility'). Lets future code group/filter items.
   // - `requiresCwd`: behavior flag — drives folder-button + cwd display on Desktop cards.
   const AGENT_CATALOG: { key: ToolType; label: string; icon: React.ReactNode; type: 'ai-cli' | 'utility'; requiresCwd: boolean }[] = (() => {
-    // OpenClaw (persona forge) and Hermes Agent are directory-agnostic —
-    // they operate on global state, not a project folder. Skip the
-    // folder-picker + cwd display so they launch in one click, like utilities.
-    const CWD_AGNOSTIC_AI_CLI = new Set<ToolType>(['openclaw', 'hermes']);
     const aiCliEntries = BUILTIN_AI_CLI_FALLBACK.map(item => ({
       key: item.key,
       label: item.label,
       icon: BUILTIN_ICONS[item.key as string] ?? null,
       type: 'ai-cli' as const,
-      requiresCwd: !CWD_AGNOSTIC_AI_CLI.has(item.key),
+      requiresCwd: true,
     }));
 
     // Utility order is deliberate for 4-column alignment in the
@@ -581,12 +458,9 @@ export function CenterPanel() {
         type: 'utility' as const,
         requiresCwd: false,
       },
-      // VibeID is a built-in skill-launcher utility: click → spawn `claude` binary
-      // in a tab, then auto-write `/vibeid\r` to trigger the remote vibeid skill.
+      // VibeID is a bundled Claude Code skill launcher: click-time install,
+      // refresh /insights, then spawn `claude /vibeid`.
       { key: 'vibeid' as ToolType, label: t('tool.vibeid' as any), icon: <SvgVibeID />, type: 'utility' as const, requiresCwd: false },
-      // Hyper-Agent — cross-tab admin MCP for OpenClaw / Hermes Agent
-      // to remote-control the running agent team. No cwd needed.
-      { key: 'hyper-agent' as ToolType, label: t('tool.hyper_agent' as any), icon: <SvgHyperAgent />, type: 'utility' as const, requiresCwd: false },
     ];
 
     return [...aiCliEntries, ...utilities];
@@ -619,7 +493,6 @@ export function CenterPanel() {
   const [sshHost, setSshHost] = useState('');
   const [sshPort, setSshPort] = useState('22');
   const [sshUser, setSshUser] = useState('root');
-  const [sshPass, setSshPass] = useState('');
   
   const [remoteHistory, setRemoteHistory] = useState<RemoteHistoryItem[]>(() => {
     try { return JSON.parse(localStorage.getItem('remote_terminal_history') || '[]'); } catch { return []; }
@@ -678,7 +551,8 @@ export function CenterPanel() {
     };
   }, []);
 
-  // Load sticky config — non-sensitive fields from localStorage, password from OS keychain
+  // Load sticky config — non-sensitive fields only. Passwords are not stored or
+  // read back through frontend IPC.
   useEffect(() => {
     try {
       const saved = localStorage.getItem('coffee_remote_cfg');
@@ -688,11 +562,6 @@ export function CenterPanel() {
         if (c.host) setSshHost(c.host);
         if (c.port) setSshPort(String(c.port));
         if (c.username) setSshUser(c.username);
-        if (isTauri && c.host && c.username) {
-          commands.loadPassword(c.host, c.username)
-            .then(pw => { if (pw) setSshPass(pw); })
-            .catch(() => {});
-        }
       }
     } catch (e) {}
   }, []);
@@ -800,14 +669,11 @@ export function CenterPanel() {
       dispatch({ type: 'SET_FOLDER', path: cwd });
     }
 
-    // Step A: Pass the user's Coffee CLI UI locale to the skill via a
-    // hint file at ~/.claude/skills/vibeid/.user_lang. The skill Step 0
-    // reads this file first — 100% reliable. Scanning session jsonl
-    // can mis-detect because the auto-run /insights tab is all English.
+    // Step A: Ensure the bundled skill is present and update the UI locale
+    // hint. This is a fixed local payload, not a remote runtime fetch.
     try {
       const lang = state.currentLang || 'en';
-      const bytes = Array.from(new TextEncoder().encode(lang));
-      await commands.writeSkillFile('.user_lang', bytes);
+      await commands.installVibeidSkill(lang);
     } catch {
       // Non-fatal — skill falls back to jsonl scanning.
     }
@@ -865,41 +731,18 @@ export function CenterPanel() {
 
     saveRemoteHistory({ protocol: remoteProtocol, host: sshHost.trim(), port: sshPort.trim(), user: sshUser.trim() });
 
-    // Validate network connection using real TCP check instead of mock
-    let isOffline = false;
-    try {
-      const portNum = parseInt(sshPort) || (remoteProtocol === 'ssh' ? 22 : 7681);
-      const isReachable = await commands.checkNetworkPort(sshHost.trim(), portNum);
-      if (!isReachable) isOffline = true;
-    } catch(err) {
-      isOffline = true;
-    }
-
-    if (isOffline) {
-      setConnStatus('failed');
-      setTimeout(() => setConnStatus('idle'), 3000);
-      return;
-    }
-
     const connDataObj = {
       protocol: remoteProtocol,
       host: sshHost.trim(),
       port: parseInt(sshPort) || (remoteProtocol === 'ssh' ? 22 : 7681),
       username: sshUser.trim(),
-      // password intentionally omitted — stored in OS keychain, not localStorage
     };
 
     try {
       localStorage.setItem('coffee_remote_cfg', JSON.stringify(connDataObj));
     } catch(e) {}
 
-    // Save password to OS keychain (Windows Credential Manager / macOS Keychain)
-    if (isTauri && sshPass) {
-      commands.savePassword(sshHost.trim(), sshUser.trim(), sshPass).catch(() => {});
-    }
-
-    // connData sent in-memory to Rust for the connection — includes password
-    const connData = JSON.stringify({ ...connDataObj, password: sshPass });
+    const connData = JSON.stringify(connDataObj);
 
     selectTool('remote', connData);
     setShowRemoteForm(false);
@@ -949,14 +792,7 @@ export function CenterPanel() {
     const pathTip = session.folderPath ?? undefined;
     switch (session.tool) {
       case 'claude': return { icon: <SvgClaude />, title: cwd ?? 'Claude Code', tooltip: pathTip };
-      case 'qwen': return { icon: <SvgQwen />, title: cwd ?? 'Qwen Code', tooltip: pathTip };
-      // OpenClaw / Hermes are directory-agnostic tools — their tab title
-      // stays as the tool name regardless of any inherited folderPath.
-      case 'hermes': return { icon: <SvgHermes />, title: 'Hermes Agent', tooltip: undefined };
-      case 'opencode': return { icon: <SvgOpenCode />, title: cwd ?? 'OpenCode', tooltip: pathTip };
-      case 'openclaw': return { icon: <SvgOpenClaw />, title: 'OpenClaw', tooltip: undefined };
       case 'codex': return { icon: <SvgCodex />, title: cwd ?? 'Codex CLI', tooltip: pathTip };
-      case 'gemini': return { icon: <SvgGemini />, title: cwd ?? 'Gemini CLI', tooltip: pathTip };
       // VibeID is a 2-phase flow under one logical operation: insights_prerun
       // gathers usage data, then vibeid analyzes it. Reuse the existing
       // `tool.vibeid` translation for both phases and suffix " (1/2)" /
@@ -985,7 +821,6 @@ export function CenterPanel() {
       case 'two-split': return { icon: <SvgTwoSplit />, title: cwd ?? t('tool.two_split' as any), tooltip: pathTip };
       case 'three-split': return { icon: <SvgThreeSplit />, title: cwd ?? t('tool.three_split' as any), tooltip: pathTip };
       case 'four-split': return { icon: <SvgFourSplit />, title: cwd ?? t('tool.four_split' as any), tooltip: pathTip };
-      case 'hyper-agent': return { icon: <SvgHyperAgent />, title: t('tool.hyper_agent' as any), tooltip: undefined };
       case 'arcade': {
         const gameName = session.toolData || '';
         const meta = gameCatalog.find(m => m.file.toLowerCase() === gameName.toLowerCase());
@@ -1168,12 +1003,6 @@ export function CenterPanel() {
                 bgType={bgType}
                 paneCount={4}
               />
-            ) : t.tool === 'hyper-agent' ? (
-              <HyperAgentPanel
-                hasBg={hasBg}
-                bgUrl={bgUrl}
-                bgType={bgType}
-              />
             ) : (
               <ErrorBoundary key={`err-${t.id}-${t.restartKey || 0}`} fallbackLabel="Tier Terminal Error">
                 <TierTerminal
@@ -1254,14 +1083,6 @@ export function CenterPanel() {
                                     // install/usage knowledge.
                                     if (tool.key === 'installer') {
                                       commands.openUrl('https://coffeecli.com/courses/claude-code').catch(() => {});
-                                      return;
-                                    }
-                                    // Hyper-Agent opens as a singleton system tab (like
-                                    // history). It does not consume one of the 5 user
-                                    // workspace tabs — it's an MCP admin endpoint, not a
-                                    // workspace.
-                                    if (tool.key === 'hyper-agent') {
-                                      dispatch({ type: 'OPEN_HYPER_AGENT_TAB' });
                                       return;
                                     }
                                     selectTool(tool.key, undefined, lastCwdByTool[tool.key!]);
@@ -1390,16 +1211,6 @@ export function CenterPanel() {
                                     onKeyDown={e => e.key === 'Enter' && handleRemoteConnect()}
                                   />
                                 </div>
-                                <div className="remote-form-row">
-                                  <label>{t('remote.password' as any)}</label>
-                                  <input
-                                    type="password"
-                                    value={sshPass}
-                                    onChange={e => setSshPass(e.target.value)}
-                                    className="remote-input"
-                                    onKeyDown={e => e.key === 'Enter' && handleRemoteConnect()}
-                                  />
-                                </div>
                               </>
                             )}
                             <button
@@ -1430,41 +1241,14 @@ export function CenterPanel() {
                                   setConnStatus('connecting');
                                   saveRemoteHistory(item); // Refresh history order
                                   
-                                  let isOffline = false;
-                                  try {
-                                    const portNum = parseInt(item.port) || (item.protocol === 'ssh' ? 22 : 7681);
-                                    const isReachable = await commands.checkNetworkPort(item.host.trim(), portNum);
-                                    if (!isReachable) isOffline = true;
-                                  } catch(err) {
-                                    isOffline = true;
-                                  }
-
-                                  if (isOffline) {
-                                    setConnStatus('failed');
-                                    setTimeout(() => setConnStatus('idle'), 3000);
-                                    return;
-                                  }
-
                                   const connDataObj = {
                                     protocol: item.protocol,
                                     host: item.host.trim(),
                                     port: parseInt(item.port) || (item.protocol === 'ssh' ? 22 : 7681),
                                     username: item.user || '',
-                                    // password omitted from localStorage
                                   };
                                   try { localStorage.setItem('coffee_remote_cfg', JSON.stringify(connDataObj)); } catch(e) {}
-                                  // Load password for this specific host from keychain, fall back to current sshPass state
-                                  const doConnect = (pw: string) => {
-                                    if (isTauri && pw) commands.savePassword(item.host.trim(), item.user || '', pw).catch(() => {});
-                                    selectTool('remote', JSON.stringify({ ...connDataObj, password: pw }));
-                                  };
-                                  if (isTauri && item.host && item.user) {
-                                    commands.loadPassword(item.host.trim(), item.user)
-                                      .then(pw => doConnect(pw ?? sshPass))
-                                      .catch(() => doConnect(sshPass));
-                                  } else {
-                                    doConnect(sshPass);
-                                  }
+                                  selectTool('remote', JSON.stringify(connDataObj));
                                   setShowRemoteForm(false);
                                   setConnStatus('idle');
                                 }}
@@ -1504,7 +1288,7 @@ export function CenterPanel() {
                           {AGENT_CATALOG.filter(item => item.type === 'ai-cli').map(item => {
                             const pinId = `agent:${item.key}`;
                             const isPinned = pinnedItems.includes(pinId);
-                            const hasGear = (['claude', 'codex', 'gemini', 'qwen', 'opencode', 'openclaw', 'hermes'] as const).includes(item.key as any);
+                            const hasGear = (['claude', 'codex'] as const).includes(item.key as any);
                             return (
                               <div
                                 key={item.key}
@@ -1543,7 +1327,7 @@ export function CenterPanel() {
                             const pinId = `agent:${item.key}`;
                             const isPinned = pinnedItems.includes(pinId);
                             // Utility tools (multi-agent / Coffee 101 /
-                            // vibeid / hyper-agent / N-split) don't take a
+                            // vibeid / N-split) don't take a
                             // launch path — no gear, just border-as-state.
                             return (
                               <div
@@ -1673,4 +1457,3 @@ export function CenterPanel() {
     </>
   );
 }
-

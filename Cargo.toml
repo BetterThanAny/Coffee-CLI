@@ -28,7 +28,7 @@ regex = "1"
 clap = { version = "4", features = ["derive"] }
 
 # Tauri
-tauri = { version = "2", features = ["devtools", "protocol-asset"] }
+tauri = { version = "2" }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
@@ -48,7 +48,6 @@ notify = "6.1.1"
 # single handler callback so the frontend doesn't re-scan 50 times.
 notify-debouncer-full = "0.3"
 rusqlite = { version = "0.32", features = ["bundled"] }
-keyring = "3"
 
 # Multi-agent MCP server (v1.0: 3 tools, HTTP Streamable transport)
 # See docs/MULTI-AGENT-ARCHITECTURE.md §5.5 for why HTTP over stdio.

@@ -18,7 +18,7 @@ on:
         description: 'Open interactive SSH session (tmate) after launch attempt'
         type: boolean
         required: false
-        default: true
+        default: false
       tmate_timeout_min:
         description: 'How many minutes to keep tmate session open'
         required: false
@@ -112,7 +112,7 @@ jobs:
           echo "=== Quarantine attribute ==="
           xattr -l "$APP_PATH" 2>&1 || true
 
-      - name: Strip quarantine and try to launch (headless)
+      - name: Try to launch (headless)
         # GitHub runners have no GUI session, so the app likely won't open
         # a visible window — but we'll capture stderr/stdout from the
         # binary directly to see if it crashes on startup, hits a Rust
@@ -121,7 +121,6 @@ jobs:
           APP_PATH="/Applications/Coffee CLI.app"
           BIN=$(find "$APP_PATH/Contents/MacOS" -type f -perm +111 | head -1)
           echo "Binary: $BIN"
-          xattr -dr com.apple.quarantine "$APP_PATH" || true
 
           # Run the binary directly with a 15s timeout. Capture all output.
           # If it panics or asserts, we'll see it here.

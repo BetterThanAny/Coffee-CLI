@@ -103,6 +103,7 @@ case "$PLATFORM" in
 esac
 
 FALLBACK_DOWNLOAD_URL=""
+FALLBACK_CHECKSUM_URL=""
 
 # Parse version from version.json — minimal JSON, no jq required
 echo "  ${GRAY}Fetching latest version...${RESET}"
@@ -122,6 +123,7 @@ if [ -z "$LATEST_VER" ] || [ "$LATEST_VER" = "$VERSION_JSON" ]; then
     LATEST_VER=$(echo "$GH_TAG" | sed 's/^v//')
     if [ -n "$ASSET_GREP" ]; then
       FALLBACK_DOWNLOAD_URL=$(echo "$GH_JSON" | grep -oE "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*${ASSET_GREP}\"" | head -1 | sed -E 's/.*"(https[^"]*)"$/\1/')
+      FALLBACK_CHECKSUM_URL=$(echo "$GH_JSON" | grep -oE "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*${ASSET_GREP}\.sha256\"" | head -1 | sed -E 's/.*"(https[^"]*)"$/\1/')
       # GitHub returned a release tag, but our platform's asset hasn't
       # been uploaded yet (mid-CI). Reset LATEST_VER so the "try again
       # in 10 minutes" branch below fires, instead of advertising a
@@ -154,6 +156,58 @@ if [ -z "$LATEST_VER" ] || [ "$LATEST_VER" = "$VERSION_JSON" ]; then
   exit 0
 fi
 echo "  ${GREEN}Latest : v$LATEST_VER${RESET}"
+
+checksum_url() {
+  if [ -n "$FALLBACK_CHECKSUM_URL" ]; then
+    printf '%s\n' "$FALLBACK_CHECKSUM_URL"
+  else
+    printf '%s/%s.sha256\n' "$DOWNLOAD_BASE" "$PLATFORM"
+  fi
+}
+
+verify_download_checksum() {
+  FILE="$1"
+  SHA_URL=$(checksum_url)
+  SHA_TMP="${FILE}.sha256"
+
+  echo "  ${GRAY}Verifying SHA-256...${RESET}"
+  if ! curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 "$SHA_URL" -o "$SHA_TMP"; then
+    echo ""
+    echo "  ${RED}Checksum download failed; refusing to install an unverifiable build.${RESET}"
+    echo ""
+    rm -f "$SHA_TMP"
+    exit 1
+  fi
+
+  EXPECTED=$(tr -d '\r' < "$SHA_TMP" | grep -oE '^[A-Fa-f0-9]{64}' | head -1 | tr 'A-F' 'a-f')
+  rm -f "$SHA_TMP"
+  if [ -z "$EXPECTED" ]; then
+    echo ""
+    echo "  ${RED}Checksum file is malformed; refusing to install.${RESET}"
+    echo ""
+    exit 1
+  fi
+
+  if command -v shasum >/dev/null 2>&1; then
+    ACTUAL=$(shasum -a 256 "$FILE" | awk '{print $1}' | tr 'A-F' 'a-f')
+  elif command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL=$(sha256sum "$FILE" | awk '{print $1}' | tr 'A-F' 'a-f')
+  else
+    echo ""
+    echo "  ${RED}No SHA-256 tool found (need shasum or sha256sum).${RESET}"
+    echo ""
+    exit 1
+  fi
+
+  if [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo ""
+    echo "  ${RED}Checksum mismatch; refusing to install.${RESET}"
+    echo "  ${GRAY}Expected: $EXPECTED${RESET}"
+    echo "  ${GRAY}Actual  : $ACTUAL${RESET}"
+    echo ""
+    exit 1
+  fi
+}
 
 # ── macOS ──────────────────────────────────────────────────────────────────────
 if [ "$OS" = "Darwin" ]; then
@@ -204,6 +258,7 @@ if [ "$OS" = "Darwin" ]; then
     echo ""
     exit 1
   fi
+  verify_download_checksum "$TMP"
 
   echo "  ${GRAY}Mounting DMG...${RESET}"
   # Grab the /Volumes/... mountpoint directly. `awk '{print $NF}'` breaks
@@ -229,18 +284,31 @@ if [ "$OS" = "Darwin" ]; then
     exit 1
   fi
 
+  echo "  ${GRAY}Verifying code signature...${RESET}"
+  if ! codesign --verify --deep --strict "$APP" >/dev/null 2>&1; then
+    echo "  ${RED}App signature verification failed.${RESET}"
+    hdiutil detach "$MOUNT" -quiet || true
+    rm -f "$TMP"
+    exit 1
+  fi
+  SIGN_INFO=$(codesign -dv --verbose=4 "$APP" 2>&1 || true)
+  if echo "$SIGN_INFO" | grep -q "Signature=adhoc"; then
+    echo "  ${RED}App is ad-hoc signed; refusing to install.${RESET}"
+    hdiutil detach "$MOUNT" -quiet || true
+    rm -f "$TMP"
+    exit 1
+  fi
+  if ! echo "$SIGN_INFO" | grep -q "Authority=Developer ID Application"; then
+    echo "  ${RED}App is not signed with a Developer ID Application certificate.${RESET}"
+    hdiutil detach "$MOUNT" -quiet || true
+    rm -f "$TMP"
+    exit 1
+  fi
+
   echo "  ${GRAY}Installing to /Applications...${RESET}"
   cp -R "$APP" /Applications/
   hdiutil detach "$MOUNT" -quiet
   rm "$TMP"
-
-  # Strip the com.apple.quarantine xattr that curl-downloaded files
-  # inherit. On Apple Silicon macOS 14+, Gatekeeper silently refuses
-  # to launch adhoc-signed apps that still carry quarantine — clicking
-  # the dock icon does nothing, no error dialog. Removing the xattr
-  # tells LaunchServices the user has explicitly opted to trust this
-  # binary (equivalent to right-click → Open the first time).
-  xattr -dr com.apple.quarantine "/Applications/Coffee CLI.app" 2>/dev/null || true
 
   echo ""
   echo "  ${GREEN}Done! Coffee CLI v$LATEST_VER installed.${RESET}"
@@ -283,6 +351,7 @@ elif [ "$OS" = "Linux" ]; then
       echo ""
       exit 1
     fi
+    verify_download_checksum "$TMP"
     echo "  ${GRAY}Installing (requires sudo)...${RESET}"
     sudo dpkg -i "$TMP"
     rm "$TMP"
@@ -307,6 +376,7 @@ elif [ "$OS" = "Linux" ]; then
     echo ""
     exit 1
   fi
+  verify_download_checksum "$TMP"
   mv -f "$TMP" "$DEST"
   chmod +x "$DEST"
 

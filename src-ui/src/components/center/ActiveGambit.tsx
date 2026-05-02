@@ -65,14 +65,13 @@ export function ActiveGambit() {
   // under activeId itself — each pane registers under a suffixed id and
   // Gambit has to pick one. Two families of multi-pane tabs exist:
   //
-  //   - Orchestrated multi-agent (`multi-agent` / `two-agent` /
+  //   - Coordinated multi-agent (`multi-agent` / `two-agent` /
   //     `three-agent`, rendered by MultiAgentGrid) uses the `::pane-N`
-  //     suffix; backend treats that prefix as "hands-free mode" and
-  //     injects auto-approve flags.
+  //     suffix so the backend can attach per-pane MCP/context wiring.
   //
   //   - Independent split (`two-split` / `three-split` / `four-split`,
   //     rendered by FourSplitGrid) uses the `::split-N` suffix; each
-  //     pane is a plain user-interactive PTY with no auto-approve.
+  //     pane is a plain user-interactive PTY.
   //
   // Both write to the same `pane-focus` registry on click (tab-scoped
   // 1..N), so routing only has to pick the right prefix.

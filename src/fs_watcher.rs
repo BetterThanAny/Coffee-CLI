@@ -37,6 +37,9 @@ fn rejected_root_reason(root: &Path) -> Option<&'static str> {
     if root.parent().is_none() {
         return Some("filesystem root");
     }
+    if root.components().count() < 3 {
+        return Some("system-level directory");
+    }
     // Windows drive root: "C:\" has one component, a Prefix and a RootDir.
     // Easier heuristic: path equals its own ancestor chain's first stop.
     #[cfg(target_os = "windows")]
@@ -51,6 +54,22 @@ fn rejected_root_reason(root: &Path) -> Option<&'static str> {
     if let Some(home) = dirs::home_dir() {
         if root == home {
             return Some("user home directory");
+        }
+        for sensitive in [
+            ".ssh",
+            ".gnupg",
+            ".aws",
+            ".config",
+            ".kube",
+            ".docker",
+            ".claude",
+            ".codex",
+            ".gemini",
+            ".coffee-cli",
+        ] {
+            if root.starts_with(home.join(sensitive)) {
+                return Some("protected configuration directory");
+            }
         }
     }
     None

@@ -9,15 +9,22 @@ import { fetchGameCatalog, type RemoteGameEntry } from '../../utils/game-catalog
 import './DosPlayer.css';
 
 
-interface GameBundle { name: string; path: string; size: number; icon?: string; title?: string; dosbox_conf?: string }
+interface GameBundle { name: string; path: string; size: number; icon?: string; title?: string; sha256?: string; dosbox_conf?: string }
 
 // emulators is loaded globally from index.html
 declare const emulators: any;
 
+async function sha256Hex(data: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', data.slice());
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export function DosPlayer({ sessionId }: { sessionId: string }) {
   const { state, dispatch } = useAppState();
   const [games, setGames] = useState<GameBundle[]>([]);
-  const [activeGame, setActiveGame] = useState<{name: string, url: string, title?: string, dosbox_conf?: string} | null>(null);
+  const [activeGame, setActiveGame] = useState<{name: string, url: string, title?: string, sha256?: string, dosbox_conf?: string} | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -25,7 +32,7 @@ export function DosPlayer({ sessionId }: { sessionId: string }) {
   const ciRef = useRef<any>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const activeGameRef = useRef<{name: string, url: string, title?: string, dosbox_conf?: string} | null>(null);
+  const activeGameRef = useRef<{name: string, url: string, title?: string, sha256?: string, dosbox_conf?: string} | null>(null);
   activeGameRef.current = activeGame;
 
   // Track whether this game session is the focused tab — read inside capture-phase listeners
@@ -56,6 +63,7 @@ export function DosPlayer({ sessionId }: { sessionId: string }) {
             size: cached ? cached.size : 0,
             icon: entry.icon,
             title: entry.title,
+            sha256: entry.sha256,
             dosbox_conf: entry.dosbox_conf,
           };
         });
@@ -87,7 +95,14 @@ export function DosPlayer({ sessionId }: { sessionId: string }) {
           const response = await fetch(activeGame.url, { cache: 'no-store' });
           if (!response.ok) throw new Error(`Failed to fetch ${activeGame.url}: ${response.status}`);
           bundleData = new Uint8Array(await response.arrayBuffer());
-          
+
+          if (activeGame.sha256) {
+            const actual = await sha256Hex(bundleData);
+            if (actual !== activeGame.sha256) {
+              throw new Error(`Integrity check failed for ${activeGame.name}`);
+            }
+          }
+
           // Cache the downloaded bundle directly to the user's local disk
           // so next time it is loaded instantaneously without internet.
           if (isTauri) {
@@ -102,10 +117,15 @@ export function DosPlayer({ sessionId }: { sessionId: string }) {
           // Local file path — read via Rust backend IPC
           const bytes = await commands.readJsdosBundle(activeGame.url);
           bundleData = new Uint8Array(bytes);
+          if (activeGame.sha256) {
+            const actual = await sha256Hex(bundleData);
+            if (actual !== activeGame.sha256) {
+              throw new Error(`Integrity check failed for cached ${activeGame.name}`);
+            }
+          }
         }
 
-        // Apply remote dosbox.conf if provided — fixes bundles with wrong path separators
-        // or missing config, and allows tuning without repackaging the .jsdos file.
+        // Apply trusted built-in dosbox.conf if provided.
         if (activeGame.dosbox_conf && typeof emulators.bundleUpdateConfig === 'function') {
           try {
             bundleData = await emulators.bundleUpdateConfig(bundleData, {
@@ -398,7 +418,7 @@ export function DosPlayer({ sessionId }: { sessionId: string }) {
 
 
   const handleLaunch = (game: GameBundle) => {
-    setActiveGame({ name: game.name, url: game.path, title: game.title, dosbox_conf: game.dosbox_conf });
+    setActiveGame({ name: game.name, url: game.path, title: game.title, sha256: game.sha256, dosbox_conf: game.dosbox_conf });
     setError(null);
     firstFrameRef.current = false;
     splashStartRef.current = Date.now();

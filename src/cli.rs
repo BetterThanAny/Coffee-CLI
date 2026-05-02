@@ -82,7 +82,11 @@ pub fn mcp_status() -> Result<()> {
     println!(
         "  PID            {}  ({})",
         manifest.pid,
-        if pid_alive { "alive" } else { "DEAD — manifest is stale" }
+        if pid_alive {
+            "alive"
+        } else {
+            "DEAD — manifest is stale"
+        }
     );
     println!(
         "  Manifest age   {}s  ({})",
@@ -93,7 +97,7 @@ pub fn mcp_status() -> Result<()> {
 
     if let Some(a) = manifest.anonymous.as_ref() {
         let age = now.saturating_sub(a.started_at);
-        println!("Anonymous server (used by codex/gemini global injection):");
+        println!("Anonymous server (used by Codex global injection):");
         println!("  URL          {}", a.url);
         println!("  Port         {}", a.port);
         println!("  Up for       {}s  ({})", age, format_age(age));
@@ -150,9 +154,7 @@ fn is_process_alive(pid: u32) -> bool {
 #[cfg(target_family = "windows")]
 fn is_process_alive(pid: u32) -> bool {
     use windows::Win32::Foundation::{CloseHandle, FALSE};
-    use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
     unsafe {
         match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) {
             Ok(h) if !h.is_invalid() => {

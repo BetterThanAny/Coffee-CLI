@@ -18,9 +18,18 @@ pub struct HookPayload {
     pub event: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct HookWirePayload {
+    pub tab_id: String,
+    pub tool: String,
+    pub status: String,
+    pub event: String,
+    pub token: String,
+}
+
 /// Bind a loopback TCP listener on an OS-assigned port, return the port, and
 /// hand the listener off to an async accept loop.
-pub fn start(app: AppHandle) -> anyhow::Result<u16> {
+pub fn start(app: AppHandle, token: String) -> anyhow::Result<u16> {
     // Bind synchronously so the caller can retrieve the port before the
     // first tab ever spawns.
     let std_listener = std::net::TcpListener::bind("127.0.0.1:0")?;
@@ -40,8 +49,9 @@ pub fn start(app: AppHandle) -> anyhow::Result<u16> {
             match listener.accept().await {
                 Ok((socket, _)) => {
                     let app = app.clone();
+                    let token = token.clone();
                     tauri::async_runtime::spawn(async move {
-                        handle_conn(app, socket).await;
+                        handle_conn(app, token, socket).await;
                     });
                 }
                 Err(e) => {
@@ -55,7 +65,7 @@ pub fn start(app: AppHandle) -> anyhow::Result<u16> {
     Ok(port)
 }
 
-async fn handle_conn(app: AppHandle, socket: tokio::net::TcpStream) {
+async fn handle_conn(app: AppHandle, expected_token: String, socket: tokio::net::TcpStream) {
     let mut reader = BufReader::new(socket);
     let mut line = String::new();
     if let Err(e) = reader.read_line(&mut line).await {
@@ -66,8 +76,18 @@ async fn handle_conn(app: AppHandle, socket: tokio::net::TcpStream) {
     if trimmed.is_empty() {
         return;
     }
-    match serde_json::from_str::<HookPayload>(trimmed) {
-        Ok(payload) => {
+    match serde_json::from_str::<HookWirePayload>(trimmed) {
+        Ok(wire) => {
+            if wire.token != expected_token {
+                eprintln!("[hook-server] rejected event with invalid token");
+                return;
+            }
+            let payload = HookPayload {
+                tab_id: wire.tab_id,
+                tool: wire.tool,
+                status: wire.status,
+                event: wire.event,
+            };
             eprintln!(
                 "[hook-server] {} {} → {}",
                 payload.tool, payload.event, payload.status

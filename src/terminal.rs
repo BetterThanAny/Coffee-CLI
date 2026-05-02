@@ -101,35 +101,17 @@ pub struct AgentPreset {
     pub prompt_markers: &'static [&'static str],
 }
 
-pub const AGENT_PRESETS: &[AgentPreset] = &[
-    AgentPreset {
-        tool_name: "claude",
-        resume_program: Some("claude"),
-        resume_args_before: &["--resume"],
-        resume_args_after: &[],
-        session_id_pattern: Some(r"Session ID:\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"),
-        token_format: Some(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
-        prompt_markers: &["❯", "> "],
-    },
-    AgentPreset {
-        tool_name: "gemini",
-        resume_program: Some("gemini"),
-        resume_args_before: &["--resume"],
-        resume_args_after: &[],
-        session_id_pattern: Some(r"Session ID:\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"),
-        token_format: Some(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
-        prompt_markers: &["✦"],
-    },
-    AgentPreset {
-        tool_name: "hermes",
-        resume_program: Some("hermes"),
-        resume_args_before: &["--resume"],
-        resume_args_after: &[],
-        session_id_pattern: Some(r"(\d{8}_\d{6}_[0-9a-f]{6})"),
-        token_format: Some(r"^\d{8}_\d{6}_[0-9a-f]{6}$"),
-        prompt_markers: &["❯"],
-    },
-];
+pub const AGENT_PRESETS: &[AgentPreset] = &[AgentPreset {
+    tool_name: "claude",
+    resume_program: Some("claude"),
+    resume_args_before: &["--resume"],
+    resume_args_after: &[],
+    session_id_pattern: Some(
+        r"Session ID:\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+    ),
+    token_format: Some(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
+    prompt_markers: &["❯", "> "],
+}];
 
 pub fn find_preset(tool_name: &str) -> Option<&'static AgentPreset> {
     AGENT_PRESETS.iter().find(|p| p.tool_name == tool_name)
@@ -142,7 +124,7 @@ pub struct TerminalSession {
     /// lock before doing PTY I/O, preventing multi-tab starvation.
     pub writer_lock: Arc<Mutex<Box<dyn Write + Send>>>,
     pub kill_tx: std::sync::mpsc::Sender<()>,
-    /// The tool name (e.g. "claude", "qwen") for this session
+    /// The tool name (e.g. "claude", "codex") for this session
     #[allow(dead_code)]
     pub tool_name: Option<String>,
     /// Captured session token for resume (e.g. Claude Session ID)
@@ -180,7 +162,6 @@ pub struct SessionActivity {
     pub user_submitted_at: Option<Instant>,
 }
 
-
 // ─── Spawn ────────────────────────────────────────────────
 
 /// Spawns `program` with `args` inside a PTY via portable-pty.
@@ -199,13 +180,17 @@ pub fn spawn(
     theme_mode: Option<String>,
     locale: Option<String>,
 ) -> anyhow::Result<()> {
-    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
     // Default to at least 120 cols so wide terminal output (help screens,
     // table output, etc.) doesn't wrap aggressively in small windows.
     let cols = initial_cols.max(120);
     let rows = initial_rows.max(24);
-    eprintln!("[Tier Terminal] Spawning '{}' args={:?}", program, args);
+    eprintln!(
+        "[Tier Terminal] Spawning '{}' arg_count={}",
+        program,
+        args.len()
+    );
     eprintln!("[Tier Terminal] Size: {}x{}", cols, rows);
 
     // ── Build command ──────────────────────────────────────────────────────
@@ -241,15 +226,12 @@ pub fn spawn(
     cmd.env("COLORTERM", "truecolor");
 
     // ── AI CLI environment hints ───────────────────────────────────────────
-    // These fixes target pain points Claude / Qwen / OpenCode / Hermes hit
-    // when running as subprocesses: color stripped, Node heap too small, git
+    // These fixes target pain points Claude / Codex hit when running as
+    // subprocesses: color stripped, Node heap too small, git
     // waiting for credential input, Unicode corruption, Homebrew tools not
     // in PATH, etc. Every env var is a no-op for tools that don't recognize
     // it — maximum benefit, zero risk for those that do.
-    let is_ai_cli = matches!(
-        tool_name.as_deref(),
-        Some("claude") | Some("qwen") | Some("opencode") | Some("hermes") | Some("codex") | Some("gemini")
-    );
+    let is_ai_cli = matches!(tool_name.as_deref(), Some("claude") | Some("codex"));
 
     if is_ai_cli {
         // Cross-platform: most CLIs auto-disable ANSI color when they detect
@@ -336,7 +318,10 @@ pub fn spawn(
                 if !needs_prepend.is_empty() {
                     let joined: Vec<String> = needs_prepend.iter().map(|s| (*s).clone()).collect();
                     let new_path = format!("{}:{}", joined.join(":"), current);
-                    eprintln!("[Tier Terminal] PATH prepended with Homebrew dirs for {}", program);
+                    eprintln!(
+                        "[Tier Terminal] PATH prepended with Homebrew dirs for {}",
+                        program
+                    );
                     cmd.env("PATH", new_path);
                 }
             }
@@ -365,8 +350,10 @@ pub fn spawn(
                 .hook_port
                 .load(std::sync::atomic::Ordering::SeqCst);
             if port != 0 {
+                let hook_token = app.state::<crate::server::AppState>().hook_token.clone();
                 cmd.env("COFFEE_CLI_TAB_ID", &session_id);
                 cmd.env("COFFEE_CLI_HOOK_PORT", port.to_string());
+                cmd.env("COFFEE_CLI_HOOK_TOKEN", hook_token);
                 cmd.env("COFFEE_CLI_TOOL", tname);
             }
         }
@@ -423,7 +410,8 @@ pub fn spawn(
 
     // Get reader/writer from the PTY master
     let mut reader = pair.master.try_clone_reader()?;
-    let writer: Arc<Mutex<Box<dyn Write + Send>>> = Arc::new(Mutex::new(pair.master.take_writer()?));
+    let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+        Arc::new(Mutex::new(pair.master.take_writer()?));
 
     // Drop the slave side — only the master is needed from here
     drop(pair.slave);
@@ -522,25 +510,30 @@ pub fn spawn(
         let activity_clone = activity.clone();
         let buffer_clone = output_buffer.clone();
         let mut map = session.lock().unwrap();
-        map.insert(session_id.clone(), TerminalSession {
-            writer_lock: writer_clone,
-            kill_tx,
-            tool_name: tool_name.clone(),
-            session_token: Mutex::new(None),
-            _master: master_clone,
-            activity: activity_clone,
-            output_buffer: buffer_clone,
-        });
+        map.insert(
+            session_id.clone(),
+            TerminalSession {
+                writer_lock: writer_clone,
+                kill_tx,
+                tool_name: tool_name.clone(),
+                session_token: Mutex::new(None),
+                _master: master_clone,
+                activity: activity_clone,
+                output_buffer: buffer_clone,
+            },
+        );
     }
 
     // Build session ID regex if this tool supports resume
-    let session_id_regex = tool_name.as_deref()
+    let session_id_regex = tool_name
+        .as_deref()
         .and_then(find_preset)
         .and_then(|p| p.session_id_pattern)
         .and_then(|pat| regex::Regex::new(pat).ok());
 
     // Get prompt markers for wait_input detection
-    let prompt_markers: Vec<String> = tool_name.as_deref()
+    let prompt_markers: Vec<String> = tool_name
+        .as_deref()
         .and_then(find_preset)
         .map(|p| p.prompt_markers.iter().map(|s| s.to_string()).collect())
         .unwrap_or_default();
@@ -551,7 +544,6 @@ pub fn spawn(
     let session_for_token = session.clone();
     let session_for_cleanup = session.clone();
     let sid_cleanup = session_id.clone();
-
 
     // ── Agent Status Ticker Thread ───────────────────────────────────────────
     // Dual-signal detection: combines PTY output timing with user-input tracking.
@@ -569,7 +561,9 @@ pub fn spawn(
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
             // Cheap atomic check — no mutex contention with the emitter.
-            if !alive_for_ticker.load(Ordering::Relaxed) { break; }
+            if !alive_for_ticker.load(Ordering::Relaxed) {
+                break;
+            }
             let mut act = match activity_for_ticker.lock() {
                 Ok(a) => a,
                 Err(_) => break,
@@ -591,7 +585,7 @@ pub fn spawn(
             } else {
                 &act.recent_text
             };
-            
+
             let is_at_prompt = markers_for_ticker.iter().any(|m| {
                 tail.contains(m.as_str()) || act.recent_text.trim_end().ends_with(m.as_str())
             });
@@ -618,7 +612,8 @@ pub fn spawn(
             //    → Agent startup output, initialization, idle = all "wait_input".
             //    → Output flowing without prior user input is just agent booting.
 
-            let user_submitted_recently = act.user_submitted_at
+            let user_submitted_recently = act
+                .user_submitted_at
                 .map(|t| now.duration_since(t).as_secs() < 120)
                 .unwrap_or(false);
 
@@ -636,12 +631,15 @@ pub fn spawn(
 
             if new_status != act.last_status {
                 act.last_status = new_status.clone();
-                let _ = app_for_ticker.emit("agent-status", AgentStatusEvent {
-                    id: sid_for_ticker.clone(),
-                    status: new_status,
-                    silence_ms,
-                    tool: tool_name_for_ticker.clone(),
-                });
+                let _ = app_for_ticker.emit(
+                    "agent-status",
+                    AgentStatusEvent {
+                        id: sid_for_ticker.clone(),
+                        status: new_status,
+                        silence_ms,
+                        tool: tool_name_for_ticker.clone(),
+                    },
+                );
             }
         }
     });
@@ -738,10 +736,8 @@ pub fn spawn(
             cwd: String,
         }
 
-        let ansi_re = regex::Regex::new(
-            r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\].*?(?:\x07|\x1b\\)|\x1b.",
-        )
-        .unwrap();
+        let ansi_re =
+            regex::Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\].*?(?:\x07|\x1b\\)|\x1b.").unwrap();
 
         let mut pending: Vec<u8> = Vec::with_capacity(131072);
         let mut token_captured = false;
@@ -775,8 +771,7 @@ pub fn spawn(
                 if !stripped.is_empty() {
                     let now = Instant::now();
                     if let Ok(mut act) = activity_for_emitter.lock() {
-                        let silence =
-                            now.duration_since(act.last_output_at).as_millis() as u64;
+                        let silence = now.duration_since(act.last_output_at).as_millis() as u64;
                         if silence > 2000 {
                             act.burst_start = Some(now);
                         }
@@ -899,10 +894,7 @@ pub fn spawn(
 /// Resolve a program name to a full path.
 #[cfg(not(target_os = "windows"))]
 fn resolve_program(name: &str) -> String {
-    if let Ok(output) = std::process::Command::new("which")
-        .arg(name)
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("which").arg(name).output() {
         if output.status.success() {
             let resolved = String::from_utf8_lossy(&output.stdout);
             if let Some(first_line) = resolved.lines().next() {
@@ -937,7 +929,10 @@ mod tests {
     #[test]
     fn osc7_basic_with_hostname() {
         let data = osc7_bel("myhost", "/home/user/projects");
-        assert_eq!(extract_osc7_cwd(&data), Some("/home/user/projects".to_string()));
+        assert_eq!(
+            extract_osc7_cwd(&data),
+            Some("/home/user/projects".to_string())
+        );
     }
 
     #[test]
@@ -956,7 +951,10 @@ mod tests {
     #[test]
     fn osc7_percent_encoded_space() {
         let data = osc7_bel("host", "/home/user/my%20project");
-        assert_eq!(extract_osc7_cwd(&data), Some("/home/user/my project".to_string()));
+        assert_eq!(
+            extract_osc7_cwd(&data),
+            Some("/home/user/my project".to_string())
+        );
     }
 
     #[test]
@@ -984,14 +982,17 @@ mod tests {
     fn osc7_windows_style_path() {
         // PowerShell emits file:///C:/Users/foo
         let data = osc7_bel("", "/C:/Users/foo/project");
-        assert_eq!(extract_osc7_cwd(&data), Some("/C:/Users/foo/project".to_string()));
+        assert_eq!(
+            extract_osc7_cwd(&data),
+            Some("/C:/Users/foo/project".to_string())
+        );
     }
 
     // ── find_preset ───────────────────────────────────────────────────────────
 
     #[test]
     fn find_preset_known_tools() {
-        for tool in &["claude", "gemini", "hermes"] {
+        for tool in &["claude"] {
             assert!(find_preset(tool).is_some(), "preset not found for {tool}");
         }
     }
@@ -1025,25 +1026,20 @@ mod tests {
 
     #[test]
     fn claude_token_valid_uuid() {
-        assert!(token_matches("claude", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"));
+        assert!(token_matches(
+            "claude",
+            "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        ));
     }
 
     #[test]
     fn claude_token_rejects_injection() {
         // Attacker appends extra flag — must be rejected
-        assert!(!token_matches("claude", "a1b2c3d4-e5f6-7890-abcd-ef1234567890 --dangerously-skip-permissions"));
+        assert!(!token_matches(
+            "claude",
+            "a1b2c3d4-e5f6-7890-abcd-ef1234567890 --dangerously-skip-permissions"
+        ));
         assert!(!token_matches("claude", ""));
         assert!(!token_matches("claude", "../../etc/passwd"));
-    }
-
-    #[test]
-    fn hermes_token_valid_format() {
-        assert!(token_matches("hermes", "20240115_143022_a1b2c3"));
-    }
-
-    #[test]
-    fn hermes_token_rejects_invalid() {
-        assert!(!token_matches("hermes", "not-a-hermes-token"));
-        assert!(!token_matches("hermes", "20240115_143022_a1b2c3 --extra"));
     }
 }

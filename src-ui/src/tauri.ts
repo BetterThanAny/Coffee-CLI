@@ -94,10 +94,6 @@ export const commands = {
     invoke<void>('tier_terminal_start', { sessionId, tool, toolData: toolData ?? null, cols, rows, themeMode, locale: locale ?? null, cwd: cwd ?? null }),
   tierTerminalInput: (sessionId: string, data: string) => 
     invoke<void>('tier_terminal_input', { sessionId, data }),
-  /** Raw write to PTY — does NOT trigger agent-status detection.
-   *  Used for system-generated input (auto-skip prompts, etc.). */
-  tierTerminalRawWrite: (sessionId: string, data: string) =>
-    invoke<void>('tier_terminal_raw_write', { sessionId, data }),
   tierTerminalKill: (sessionId: string) => 
     invoke<void>('tier_terminal_kill', { sessionId }),
   tierTerminalResize: (sessionId: string, cols: number, rows: number) =>
@@ -108,7 +104,6 @@ export const commands = {
   readNativeSession: (filePath: string) => invoke<string>('read_native_session', { filePath }),
   tierTerminalResume: (sessionId: string, savedSessionId: string, tool: string, sessionToken: string, cols: number, rows: number, cwd: string) =>
     invoke<void>('tier_terminal_resume', { sessionId, savedSessionId, tool, sessionToken, cols, rows, cwd }),
-  checkNetworkPort: (host: string, port: number) => invoke<boolean>('check_network_port', { host, port }),
 
   // Tool availability detection
   checkToolsInstalled: () =>
@@ -140,24 +135,14 @@ export const commands = {
   loadTasks: () => invoke<string>('load_tasks'),
   saveTasks: (data: string) => invoke<void>('save_tasks', { data }),
 
-  // Credential store — passwords live in OS keychain, never in localStorage
-  savePassword: (host: string, username: string, password: string) =>
-    invoke<void>('save_password', { host, username, password }),
-  loadPassword: (host: string, username: string) =>
-    invoke<string | null>('load_password', { host, username }),
-  deletePassword: (host: string, username: string) =>
-    invoke<void>('delete_password', { host, username }),
   openUrl: (url: string) =>
     invoke<void>('open_url', { url }),
 
-  // Skill auto-install: check whether ~/.claude/skills/<name>/SKILL.md exists,
-  // and write individual files into ~/.claude/skills/vibeid/<relPath>.
-  // Used by the VibeID launcher to hydrate the skill on first launch by
-  // fetching the remote skill package and piping each file through.
+  // Skill install: hydrate the bundled VibeID skill from app resources.
   checkSkillInstalled: (name: string) =>
     invoke<boolean>('check_skill_installed', { name }),
-  writeSkillFile: (relPath: string, bytes: number[]) =>
-    invoke<void>('write_skill_file', { relPath, bytes }),
+  installVibeidSkill: (lang: string) =>
+    invoke<void>('install_vibeid_skill', { lang }),
 
   // Check whether `~/.claude/usage-data/report.html` exists. Used by the
   // VibeID launcher to gate between running /insights first or going
@@ -182,12 +167,11 @@ export const commands = {
 
   // Multi-agent mode — post-v1.5 this is a thin handshake. The backend
   // creates per-pane MCP servers + per-pane CLI artifacts (Claude
-  // mcp.json / Codex instructions.md / Gemini extension stub) lazily
-  // when each pane spawns its CLI inside `tier_terminal_start`. No
-  // workspace files are written and no global ~/.codex / ~/.gemini
-  // entries are injected, so there's nothing to "install" or
-  // "uninstall" at this layer. The call is kept as the structured
-  // place for the backend to surface preflight warnings and for future
+  // mcp.json / Codex instructions.md) lazily when each pane spawns its
+  // CLI inside `tier_terminal_start`. No workspace files are written
+  // and no global CLI config entries are injected, so there's nothing
+  // to "install" or "uninstall" at this layer. The call is kept as the
+  // structured place for backend preflight warnings and future
   // cross-cutting validation.
   enableMultiAgentMode: (workspace: string, tools: string[]) =>
     invoke<{ ok: boolean; warnings: string[] }>(
@@ -199,12 +183,6 @@ export const commands = {
       'disable_multi_agent_mode',
       { workspace },
     ),
-
-  // ─── Hyper-Agent (cross-tab admin MCP for OpenClaw / Hermes Agent) ──
-  startHyperAgentServer: () =>
-    invoke<HyperAgentStatus>('start_hyper_agent_server'),
-  getHyperAgentEndpoint: () =>
-    invoke<McpEndpoint | null>('get_hyper_agent_endpoint'),
 
   // ─── Per-tool launch overrides (~/.coffee-cli/tools.json) ───────────
   getToolConfig: (tool: string) =>
@@ -222,17 +200,11 @@ export interface McpEndpoint {
   started_at: number;
 }
 
-export interface HyperAgentStatus {
-  endpoint: McpEndpoint;
-}
-
 /**
  * One entry in `~/.coffee-cli/tools.json`. All fields are optional —
  * empty strings / empty arrays fall through to Coffee CLI's built-in
- * defaults for that tool. Lets users say things like "my hermes is at
- * `wsl ~/.local/bin/hermes`" or "always launch claude with
- * --dangerously-skip-permissions" without us having to auto-detect
- * every conceivable install path.
+ * defaults for that tool. Lets users point a supported tool at a wrapper
+ * command without us having to auto-detect every conceivable install path.
  */
 export interface ToolConfigEntry {
   /** Full launch command. Whitespace-split — first token is the binary,

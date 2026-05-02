@@ -1,13 +1,10 @@
 //! Build the per-pane multi-agent protocol text.
 //!
-//! Same body, three delivery vehicles (decided by `mcp_injector` and
+//! Same body, two delivery vehicles (decided by `mcp_injector` and
 //! `server::tier_terminal_start_blocking`):
 //!
 //!   - Claude Code → `--append-system-prompt <text>` (survives /clear and /compact)
-//!   - Codex       → `-c experimental_instructions_file=<temp>/instructions.md` (text file)
-//!   - Gemini      → `<temp>/coffee-cli/panes/<pane>/GEMINI.md` referenced by the
-//!                   per-pane Gemini extension manifest's `contextFileName`,
-//!                   loaded into the model's `userMemory` for the session
+//!   - Codex       → `-c model_instructions_file=<temp>/instructions.md` (text file)
 //!
 //! The text inlines the running pane's id; the matching per-pane MCP
 //! server has the same id baked in (`mcp_server::spawn(.., Some(id))`),
@@ -18,8 +15,8 @@
 //! No workspace `.md` file is ever written — this module is purely a
 //! string builder. The earlier v1.0–v1.4 logic that wrote
 //! `<workspace>/.multi-agent/PROTOCOL.md` + thin-pointer
-//! `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` was retired in v1.5 once
-//! all three CLIs got per-pane in-memory injection paths.
+//! `CLAUDE.md` / `AGENTS.md` was retired in v1.5 once supported CLIs
+//! got per-pane in-memory injection paths.
 
 /// Build the per-pane multi-agent protocol text for `pane_id`. The
 /// returned string is safe to drop into a system prompt or a

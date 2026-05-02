@@ -26,6 +26,7 @@ Write-Host "  Fetching latest version..." -ForegroundColor Gray
 # reliable for the single-user case.
 $latestVer = $null
 $fallbackUrl = $null
+$fallbackChecksumUrl = $null
 try {
     $latestVer = (Invoke-RestMethod "https://coffeecli.com/version.json?platform=windows" -TimeoutSec 10).version
 } catch {
@@ -40,6 +41,10 @@ if (-not $latestVer) {
         if ($winAsset) {
             $latestVer = $release.tag_name -replace '^v',''
             $fallbackUrl = $winAsset.browser_download_url
+            $checksumAsset = $release.assets | Where-Object { $_.name -eq "$($winAsset.name).sha256" } | Select-Object -First 1
+            if ($checksumAsset) {
+                $fallbackChecksumUrl = $checksumAsset.browser_download_url
+            }
         }
     } catch {}
 }
@@ -86,6 +91,49 @@ if (-not $latestVer) {
 
 Write-Host "  Latest : v$latestVer" -ForegroundColor Green
 
+function Get-ChecksumUrl {
+    if ($fallbackChecksumUrl) {
+        return $fallbackChecksumUrl
+    }
+    return "https://coffeecli.com/download/windows.sha256"
+}
+
+function Test-DownloadChecksum {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    Write-Host "  Verifying SHA-256..." -ForegroundColor Gray
+    $checksumUrl = Get-ChecksumUrl
+    try {
+        $checksumText = Invoke-WebRequest $checksumUrl -UseBasicParsing -TimeoutSec 15
+    } catch {
+        Write-Host ""
+        Write-Host "  Checksum download failed; refusing to install an unverifiable build." -ForegroundColor Red
+        Write-Host ""
+        exit 1
+    }
+
+    $match = [regex]::Match($checksumText.Content, '^[A-Fa-f0-9]{64}')
+    if (-not $match.Success) {
+        Write-Host ""
+        Write-Host "  Checksum file is malformed; refusing to install." -ForegroundColor Red
+        Write-Host ""
+        exit 1
+    }
+
+    $expected = $match.Value.ToLowerInvariant()
+    $actual = (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $expected) {
+        Write-Host ""
+        Write-Host "  Checksum mismatch; refusing to install." -ForegroundColor Red
+        Write-Host "  Expected: $expected" -ForegroundColor DarkGray
+        Write-Host "  Actual  : $actual" -ForegroundColor DarkGray
+        Write-Host ""
+        exit 1
+    }
+}
+
 if ($installedVer) {
     Write-Host "  Installed: v$installedVer" -ForegroundColor Gray
     if ($installedVer -eq $latestVer) {
@@ -116,6 +164,8 @@ try {
     Write-Host ""
     exit 1
 }
+
+Test-DownloadChecksum -Path $out
 
 Write-Host "  Installing..." -ForegroundColor Gray
 Start-Process $out -Wait

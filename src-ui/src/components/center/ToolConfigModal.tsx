@@ -39,21 +39,12 @@ const EMPTY: ToolConfigEntry = {
 const TOOL_DEFAULTS: Record<string, ToolConfigEntry> = {
   claude:   { command: 'claude',   extra_args: [], default_cwd: '', history_path: '~/.claude/projects' },
   codex:    { command: 'codex',    extra_args: [], default_cwd: '', history_path: '~/.codex/sessions' },
-  gemini:   { command: 'gemini',   extra_args: [], default_cwd: '', history_path: '~/.gemini/tmp' },
-  qwen:     { command: 'qwen',     extra_args: [], default_cwd: '', history_path: '' },
-  opencode: { command: 'opencode', extra_args: [], default_cwd: '', history_path: '~/.local/share/opencode' },
-  openclaw: { command: 'openclaw', extra_args: [], default_cwd: '', history_path: '~/.openclaw/agents' },
-  hermes:   { command: 'hermes',   extra_args: [], default_cwd: '', history_path: '~/.hermes/sessions' },
 };
 
 // Tools whose session history Coffee CLI's history scanner actually reads
 // (load_native_history_blocking in src/server.rs). For these we surface
-// the history_path field. For tools NOT in this set (only qwen now —
-// no Qwen scanner has been written), the field is hidden — letting the
-// user fill a path that nothing ever scans would just be a footgun.
-const HISTORY_SCANNED_TOOLS = new Set([
-  'claude', 'codex', 'gemini', 'hermes', 'opencode', 'openclaw',
-]);
+// the history_path field.
+const HISTORY_SCANNED_TOOLS = new Set(['claude', 'codex']);
 
 const defaultsFor = (key: string): ToolConfigEntry => TOOL_DEFAULTS[key] ?? EMPTY;
 

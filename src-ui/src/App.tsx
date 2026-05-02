@@ -70,14 +70,11 @@ export function App() {
   // actual <img> render sites (see CenterPanel.tsx `toolIcon`),
   // icons paint on the very first frame of every remount.
   //
-  // The SVG logos (claude/codex/gemini/opencode/qwen) were moved
-  // inline into CenterPanel.tsx in v1.1.5 and no longer need
-  // preloading — they ship as strings inside the JS bundle. Only
-  // remaining entries are the PNG rasters + the terminal SVGs.
+  // The SVG logos (claude/codex) are inline in CenterPanel.tsx and
+  // no longer need preloading. Only remaining entries are the PNG
+  // rasters + the terminal SVGs.
   useEffect(() => {
     const ICONS = [
-      '/icons/tools/opencode.png',
-      '/icons/tools/hermes.png',
       '/icons/tools/vibeid.png',
       '/icons/tools/terminal-powershell.svg',
       '/icons/tools/terminal-macos.png',

@@ -42,7 +42,7 @@ interface GambitProps {
 
 // Matches any absolute image path inside the compose draft — both our
 // own temp-dir clip images AND user-typed paths like
-//   说看看图片"C:\Users\eben\Desktop\hermes.png"
+//   说看看图片"C:\Users\me\Desktop\screenshot.png"
 //   cat /home/me/screenshot.jpg
 // Requires a drive letter (Win) or leading slash (POSIX) so we don't
 // false-positive on bare filenames mentioned in prose like ".png 格式".
@@ -817,4 +817,3 @@ function fileToBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-

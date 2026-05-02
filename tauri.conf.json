@@ -28,10 +28,10 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://coffeecli.com; connect-src 'self' https://coffeecli.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
       "assetProtocol": {
-        "enable": true,
-        "scope": ["**"]
+        "enable": false,
+        "scope": []
       }
     }
   },

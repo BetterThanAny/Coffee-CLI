@@ -9,6 +9,7 @@
 # Env vars (injected by Coffee CLI when spawning Claude in a tab):
 #   COFFEE_CLI_TAB_ID    — tab/session UUID the agent belongs to
 #   COFFEE_CLI_HOOK_PORT — loopback port of the Rust hook server
+#   COFFEE_CLI_HOOK_TOKEN — per-process token required by the hook server
 #   COFFEE_CLI_TOOL      — always "claude" today (only Claude is supported)
 #
 # Exit 0 silently on any error. A flaky hook must never block the agent.
@@ -27,8 +28,9 @@ def main() -> None:
 
     tab_id = os.environ.get("COFFEE_CLI_TAB_ID")
     port = os.environ.get("COFFEE_CLI_HOOK_PORT")
+    token = os.environ.get("COFFEE_CLI_HOOK_TOKEN")
     tool = os.environ.get("COFFEE_CLI_TOOL", "")
-    if not tab_id or not port:
+    if not tab_id or not port or not token:
         sys.exit(0)
 
     event = data.get("hook_event_name", "")
@@ -61,6 +63,7 @@ def main() -> None:
         "tool": tool,
         "status": status,
         "event": event,
+        "token": token,
     }
 
     try:

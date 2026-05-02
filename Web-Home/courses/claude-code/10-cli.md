@@ -171,10 +171,11 @@ claude --tmux
 下面这些参数非常重要，但也是最容易被误用的一组：
 
 - `--permission-mode`
-- `--dangerously-skip-permissions`
 - `--allowedTools`
 - `--disallowedTools`
 - `--tools`
+
+本地 GUI、分屏或自动化包装器不应该替用户跳过权限确认。需要更少提示时，优先用 `--permission-mode`、`--allowedTools` 和 `--disallowedTools` 做明确约束。
 
 ### 实用例子
 

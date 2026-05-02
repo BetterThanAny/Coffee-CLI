@@ -1,15 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod cli;
-mod terminal;
-mod server;
-mod hook_server;
-mod hook_installer;
 mod fs_watcher;
-mod mcp_server;
+mod hook_installer;
+mod hook_server;
 mod mcp_injector;
+mod mcp_server;
 mod multi_agent_protocol;
-mod agent_mcp_config;
+mod server;
+mod terminal;
 mod tool_config;
 
 use anyhow::Result;
@@ -55,7 +54,7 @@ fn main() -> Result<()> {
     // installed via Homebrew, nvm, volta, asdf, npm-global, cargo, bun,
     // ~/.local/bin, etc. are invisible to every Command::new() in the
     // process. Symptom: tool-detection cards stay greyed out even though
-    // `claude` / `codex` / `gemini` / `hermes` are clearly installed.
+    // `claude` / `codex` are clearly installed.
     //
     // Fix: ask the user's login shell for its real PATH ONCE at startup
     // and replace the process PATH. Every downstream subprocess
@@ -124,9 +123,7 @@ fn main() -> Result<()> {
 /// No-op on Unix and on debug builds.
 #[cfg(all(target_os = "windows", not(debug_assertions)))]
 fn attach_terminal_console() {
-    use windows::Win32::System::Console::{
-        AttachConsole, ATTACH_PARENT_PROCESS,
-    };
+    use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
     unsafe {
         // Best-effort: if the parent has no console (e.g. invoked
         // from explorer double-click), AttachConsole returns FALSE

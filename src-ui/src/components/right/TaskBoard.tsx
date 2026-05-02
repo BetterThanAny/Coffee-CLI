@@ -510,7 +510,7 @@ export function TaskBoard() {
       {/* ── User Profile Header (Hidden for now, planned for next version) ── */}
       <div className="panel-header" style={{ visibility: 'hidden', height: 0, minHeight: 0, padding: 0, overflow: 'hidden' }}>
         <div className="brand">
-          <img src="https://i.pravatar.cc/150?u=a042581f4e29026024d" alt="avatar" style={{ width: 24, height: 24, borderRadius: '50%' }} />
+          <div aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--text-secondary)' }} />
           <span>Eben</span>
         </div>
         <div className="header-actions">

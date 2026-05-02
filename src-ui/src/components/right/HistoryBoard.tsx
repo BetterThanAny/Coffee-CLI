@@ -16,27 +16,18 @@ import './HistoryBoard.css';
 const TOOL_ICON_SRC: Record<string, string> = {
   claude:   '/icons/tools/claude.svg',
   codex:    '/icons/tools/codex.svg',
-  gemini:   '/icons/tools/gemini.svg',
-  qwen:     '/icons/tools/qwen.svg',
-  hermes:   '/icons/tools/hermes.png',
-  opencode: '/icons/tools/opencode.png',
 };
 
 const getToolIcon = (tool: string) => {
   const src = TOOL_ICON_SRC[tool];
   if (!src) return <div style={{ width: 14, height: 14, borderRadius: 'var(--radius-xs)', background: '#555' }}/>;
-  const extra = (tool === 'hermes' || tool === 'opencode') ? { borderRadius: 'var(--radius-xs)', objectFit: 'cover' as const } : {};
-  return <img src={src} alt="" style={{ width: '1em', height: '1em', flexShrink: 0, objectFit: 'contain', ...extra }}/>;
+  return <img src={src} alt="" style={{ width: '1em', height: '1em', flexShrink: 0, objectFit: 'contain' }}/>;
 };
 
 const getToolName = (tool: string, _lang: string) => {
   switch (tool) {
     case 'claude': return 'Claude Code';
     case 'codex': return 'Codex CLI';
-    case 'gemini': return 'Gemini CLI';
-    case 'qwen': return 'Qwen Code';
-    case 'hermes': return 'Hermes Agent';
-    case 'opencode': return 'OpenCode';
     default: return tool.replace(/^\w/, c => c.toUpperCase());
   }
 };
@@ -61,7 +52,7 @@ export function HistoryBoard() {
   const baseSessions: SavedSession[] = isTauri ? cachedSessions : cachedSessions.length > 0 ? cachedSessions : [
     { id: 'mock-1', name: 'build a flash card website', tool: 'claude', cwd: '~/projects/flashcards', session_token: 'tk1', saved_at: new Date().toISOString() },
     { id: 'mock-2', name: 'build a snake game', tool: 'claude', cwd: '~/projects/snake', session_token: 'tk2', saved_at: new Date(Date.now() - 3600000).toISOString() },
-    { id: 'mock-3', name: 'refactor components', tool: 'qwen', cwd: '~/projects/coffee', session_token: 'tk3', saved_at: new Date(Date.now() - 86400000 * 2).toISOString() },
+    { id: 'mock-3', name: 'refactor components', tool: 'codex', cwd: '~/projects/coffee', session_token: 'tk3', saved_at: new Date(Date.now() - 86400000 * 2).toISOString() },
   ];
 
   const filteredSessions = baseSessions.filter(s => {
