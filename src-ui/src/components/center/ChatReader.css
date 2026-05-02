@@ -1,10 +1,18 @@
-/* ChatReader.css */
+/* ChatReader.css — history-session viewer
+   All visible colors come from theme variables so the page tracks every
+   theme. Earlier the container used var(--bg-main, #141414) — but no
+   theme defines --bg-main, so the fallback always won and the page
+   stayed black on every theme. Same pattern with the header background
+   (rgba(28,28,30,0.85)), border (rgba(255,255,255,0.05)), assistant
+   bubble (rgba(255,255,255,0.04)), and scrollbar thumb — all hard-coded
+   to "dark theme only", which is exactly what the user reported in
+   github.com/edison7009/Coffee-CLI/issues/21. */
 
 .chat-reader-container {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-main, #141414);
+  background: var(--bg-panel);
   position: relative;
   overflow: hidden;
   animation: fade-in 0.3s ease-out;
@@ -20,10 +28,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: rgba(28, 28, 30, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border);
   z-index: 10;
 }
 
@@ -36,13 +44,13 @@
 .chat-reader-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--text-1, #e8e4de);
+  color: var(--text-1);
   font-family: var(--font, system-ui);
 }
 
 .chat-reader-subtitle {
   font-size: 12px;
-  color: var(--text-3, rgba(255, 255, 255, 0.4));
+  color: var(--text-3);
   font-family: var(--font-mono, monospace);
   display: flex;
   align-items: center;
@@ -70,14 +78,14 @@
 }
 
 .btn-primary {
-  background: var(--accent, #c4956a);
+  background: var(--accent);
   color: #fff;
 }
 
 .btn-primary:hover {
   background: color-mix(in srgb, var(--accent) 85%, #fff);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(196, 149, 106, 0.3);
+  box-shadow: 0 4px 12px var(--accent-bg);
 }
 
 .btn-primary:active {
@@ -85,13 +93,13 @@
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-2, rgba(255, 255, 255, 0.7));
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-card);
+  color: var(--text-2);
+  border: 1px solid var(--border);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-hover);
   color: var(--text-1);
 }
 
@@ -105,7 +113,8 @@
   gap: 24px;
 }
 
-/* Scrollbar matching terminal config */
+/* Scrollbar — neutral grey driven by --text-3 so it shows on light AND
+   dark themes (white on white was invisible on the light theme). */
 .chat-reader-body::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -114,11 +123,11 @@
   background: transparent;
 }
 .chat-reader-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--text-3) 35%, transparent);
   border-radius: var(--radius-xs);
 }
 .chat-reader-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--text-3) 60%, transparent);
 }
 
 .chat-message-row {
@@ -144,33 +153,33 @@
   font-size: 14px;
   line-height: 1.6;
   font-family: var(--font, system-ui);
-  color: var(--text-1, #e8e4de);
+  color: var(--text-1);
   word-break: break-word;
   white-space: pre-wrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 6px rgba(var(--shadow-rgb), 0.08);
   position: relative;
 }
 
 .chat-message-row.user .chat-bubble {
-  background: rgba(196, 149, 106, 0.15);
-  border: 1px solid rgba(196, 149, 106, 0.2);
+  background: var(--accent-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-bottom-right-radius: 4px;
 }
 
 .chat-message-row.assistant .chat-bubble {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
 }
 
 /* Thinking block styling */
 .chat-thinking {
   font-family: var(--font-mono, monospace);
-  color: var(--text-3, rgba(255, 255, 255, 0.4));
+  color: var(--text-3);
   font-size: 13px;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+  border-bottom: 1px dashed var(--border);
   white-space: pre-wrap;
 }
 
@@ -180,7 +189,7 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  color: var(--text-2, rgba(255, 255, 255, 0.6));
+  color: var(--text-2);
 }
 
 .chat-text {
@@ -193,7 +202,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-3, rgba(255, 255, 255, 0.4));
+  color: var(--text-3);
   gap: 16px;
 }
 
