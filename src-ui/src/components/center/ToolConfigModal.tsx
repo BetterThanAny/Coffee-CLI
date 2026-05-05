@@ -1,13 +1,12 @@
-// Per-tool launch override modal — minimal version.
+// Per-tool configuration modal — minimal version.
 //
 // Reached from the small gear on Library cards. Lets the user override
-// how a specific CLI tool is spawned: launch path (e.g. wsl claude),
-// extra args, default cwd, custom history scan path. All four fields
-// are optional — empty falls through to Coffee CLI's built-in default.
+// safe per-tool paths: default cwd and custom history scan path. Empty
+// fields fall through to Coffee CLI's built-in default.
 //
 // Stripped of explanatory text on purpose: anyone reaching this modal
-// is already comfortable with CLI args + paths. 4 field labels + 3
-// button labels = 7 total i18n keys, nothing else.
+// is already comfortable with CLI args + paths. 2 field labels + 3
+// button labels = 5 total i18n keys, nothing else.
 //
 // Styling references theme tokens (--bg-panel / --text-1 / --accent
 // etc.) so dark and light themes are picked up automatically — no
@@ -32,13 +31,12 @@ const EMPTY: ToolConfigEntry = {
   history_path: '',
 };
 
-// Built-in defaults mirroring tier_terminal_start_blocking. Used as the
-// initial form values when no user override exists, and as the target of
-// the Reset button. Source of truth still lives in Rust; this table only
-// surfaces those values to the UI.
+// Built-in safe-path defaults. Used as the initial form values when no user
+// override exists, and as the target of the Reset button. Launch command and
+// extra args intentionally stay empty because the backend rejects them.
 const TOOL_DEFAULTS: Record<string, ToolConfigEntry> = {
-  claude:   { command: 'claude',   extra_args: [], default_cwd: '', history_path: '~/.claude/projects' },
-  codex:    { command: 'codex',    extra_args: [], default_cwd: '', history_path: '~/.codex/sessions' },
+  claude:   { command: '', extra_args: [], default_cwd: '', history_path: '~/.claude/projects' },
+  codex:    { command: '', extra_args: [], default_cwd: '', history_path: '~/.codex/sessions' },
 };
 
 // Tools whose session history Coffee CLI's history scanner actually reads
@@ -50,8 +48,8 @@ const defaultsFor = (key: string): ToolConfigEntry => TOOL_DEFAULTS[key] ?? EMPT
 
 function withFallback(user: ToolConfigEntry, def: ToolConfigEntry): ToolConfigEntry {
   return {
-    command:      user.command      || def.command,
-    extra_args:   user.extra_args.length ? user.extra_args : def.extra_args,
+    command:      '',
+    extra_args:   [],
     default_cwd:  user.default_cwd  || def.default_cwd,
     history_path: user.history_path || def.history_path,
   };
@@ -71,7 +69,6 @@ export function ToolConfigModal({ toolKey, toolLabel, onClose }: Props) {
   const [entry, setEntry] = useState<ToolConfigEntry>(def);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [extraArgsText, setExtraArgsText] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +78,6 @@ export function ToolConfigModal({ toolKey, toolLabel, onClose }: Props) {
         if (cancelled) return;
         const merged = withFallback(user, def);
         setEntry(merged);
-        setExtraArgsText(merged.extra_args.join('\n'));
       } catch {
         /* swallow — leave the form at defaults */
       } finally {
@@ -94,10 +90,9 @@ export function ToolConfigModal({ toolKey, toolLabel, onClose }: Props) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const args = extraArgsText.split('\n').map(s => s.trim()).filter(Boolean);
       const payload: ToolConfigEntry = {
-        command:      diffField(entry.command.trim(), def.command),
-        extra_args:   diffField(args, def.extra_args),
+        command:      '',
+        extra_args:   [],
         default_cwd:  diffField(entry.default_cwd.trim(), def.default_cwd),
         history_path: diffField(entry.history_path.trim(), def.history_path),
       };
@@ -113,7 +108,6 @@ export function ToolConfigModal({ toolKey, toolLabel, onClose }: Props) {
     try {
       await commands.setToolConfig(toolKey, EMPTY);
       setEntry(def);
-      setExtraArgsText(def.extra_args.join('\n'));
     } finally {
       setSaving(false);
     }
@@ -129,18 +123,6 @@ export function ToolConfigModal({ toolKey, toolLabel, onClose }: Props) {
 
         {!loading && (
           <>
-            <Field
-              label={t('tool_config.command' as any)}
-              value={entry.command}
-              onChange={v => setEntry({ ...entry, command: v })}
-            />
-            <Field
-              label={t('tool_config.extra_args' as any)}
-              value={extraArgsText}
-              onChange={setExtraArgsText}
-              multiline
-              rows={3}
-            />
             <Field
               label={t('tool_config.default_cwd' as any)}
               value={entry.default_cwd}

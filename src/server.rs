@@ -844,6 +844,9 @@ fn fs_paste(action: String, src_path: String, target_dir: String) -> Result<(), 
         "cut" => std::fs::rename(&src, &dest).map_err(|e| format!("Move failed: {e}")),
         "copy" => {
             if src.is_dir() {
+                if target_canonical.starts_with(&src) {
+                    return Err("Cannot copy a directory into itself".to_string());
+                }
                 copy_dir_all(&src, &dest).map_err(|e| format!("Copy dir failed: {e}"))
             } else {
                 std::fs::copy(&src, &dest)
@@ -869,6 +872,68 @@ fn copy_dir_all(src: &std::path::Path, dest: &std::path::Path) -> std::io::Resul
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod fs_paste_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_root(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        std::env::current_dir()
+            .expect("test needs current dir")
+            .join("target")
+            .join("fs-paste-tests")
+            .join(format!("{name}-{unique}"))
+    }
+
+    #[test]
+    fn fs_paste_copy_dir_all_rejects_directory_into_own_descendant() {
+        let root = test_root("descendant");
+        let src = root.join("src");
+        let child = src.join("child");
+        std::fs::create_dir_all(&child).expect("create test dirs");
+        std::fs::write(src.join("file.txt"), "content").expect("write source file");
+
+        let result = fs_paste(
+            "copy".to_string(),
+            src.to_string_lossy().into_owned(),
+            child.to_string_lossy().into_owned(),
+        );
+
+        assert!(result.is_err());
+        assert!(!child.join("src").exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn fs_paste_copy_dir_all_copies_directory_to_sibling() {
+        let root = test_root("sibling");
+        let src = root.join("src");
+        let target = root.join("target");
+        std::fs::create_dir_all(&src).expect("create source dir");
+        std::fs::create_dir_all(&target).expect("create target dir");
+        std::fs::write(src.join("file.txt"), "content").expect("write source file");
+
+        fs_paste(
+            "copy".to_string(),
+            src.to_string_lossy().into_owned(),
+            target.to_string_lossy().into_owned(),
+        )
+        .expect("copy to sibling should succeed");
+
+        assert_eq!(
+            std::fs::read_to_string(target.join("src").join("file.txt")).expect("read copied file"),
+            "content"
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
 
 // ─── Tier Terminal API ────────────────────────────────────────────────────────
